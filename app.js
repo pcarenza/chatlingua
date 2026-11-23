@@ -4,13 +4,15 @@ const android = globalThis.ChatLinguaAndroid;
 const get = id => document.getElementById(id);
 const ui = Object.fromEntries(['invite', 'status', 'remote', 'placeholder', 'stage-title', 'stage-description',
   'start', 'self', 'local', 'overlay', 'mic', 'camera', 'captions', 'end', 'spoken', 'source',
-  'target', 'caption-status', 'history'].map(id => [id, get(id)]));
+  'target', 'caption-status', 'history', 'chat-toggle', 'chat-label', 'chat-panel', 'chat-status',
+  'chat-messages', 'chat-form', 'chat-input', 'chat-send'].map(id => [id, get(id)]));
 const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
 const cameraIcon = icon('<rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/>');
 get('camera-icon').innerHTML = cameraIcon;
 ui.camera.querySelector('.icon').innerHTML = cameraIcon;
 ui.mic.querySelector('.icon').innerHTML = icon('<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3m-3 0h6"/>');
 ui.captions.querySelector('.icon').innerHTML = icon('<rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9H8a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2m8-6h-2a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2"/>');
+ui['chat-toggle'].querySelector('.icon').innerHTML = icon('<path d="M21 11a8 8 0 0 1-8 8H9l-5 3v-5a8 8 0 0 1-2-6 8 8 0 0 1 8-8h3a8 8 0 0 1 8 8Z"/><path d="M7 9h9m-9 4h6"/>');
 ui.end.querySelector('.icon').innerHTML = icon('<path d="M3 15v-2a4 4 0 0 1 2-3 15 15 0 0 1 14 0 4 4 0 0 1 2 3v2h-5v-3a11 11 0 0 0-8 0v3z"/>');
 
 const languages = {
@@ -54,7 +56,7 @@ function lobby() {
 }
 
 function activateControls(active) {
-  for (const button of [ui.mic, ui.camera, ui.captions, ui.end]) button.disabled = !active;
+  for (const button of [ui.mic, ui.camera, ui.captions, ui['chat-toggle'], ui.end]) button.disabled = !active;
   ui.invite.hidden = !active || call?.role !== 'host';
   ui.invite.textContent = android ? 'Share invite link' : 'Copy invite link';
 }
@@ -89,25 +91,98 @@ function showRemote(session) {
   ui['stage-description'].textContent = 'Your call partner can still talk.';
 }
 
+const maxChatLength = 1000;
+let unreadChat = 0;
+
+function updateChatAvailability() {
+  const ready = call?.channel?.readyState === 'open';
+  ui['chat-input'].disabled = !ready;
+  ui['chat-send'].disabled = !ready || !ui['chat-input'].value.trim();
+  ui['chat-status'].textContent = ready ? '' : 'Chat opens when your call connects.';
+  ui['chat-status'].hidden = Boolean(ready);
+}
+
+function openChat(open) {
+  ui['chat-panel'].hidden = !open;
+  ui['chat-toggle'].setAttribute('aria-expanded', String(open));
+  if (open) {
+    unreadChat = 0;
+    ui['chat-label'].textContent = 'Chat';
+    ui['chat-messages'].scrollTop = ui['chat-messages'].scrollHeight;
+  }
+}
+
+function addChatMessage(text, fromSelf) {
+  const message = document.createElement('article');
+  message.className = fromSelf ? 'chat-message from-self' : 'chat-message';
+  const sender = document.createElement('small');
+  sender.textContent = fromSelf ? 'You' : 'Partner';
+  const body = document.createElement('div');
+  body.dir = 'auto';
+  body.textContent = text;
+  message.append(sender, body);
+  const log = ui['chat-messages'];
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+  log.append(message);
+  if (log.childElementCount > 200) log.firstElementChild.remove();
+  if (fromSelf || atBottom) log.scrollTop = log.scrollHeight;
+  if (!fromSelf && ui['chat-panel'].hidden) {
+    unreadChat++;
+    ui['chat-label'].textContent = 'Chat (' + unreadChat + ')';
+  }
+}
+
+function handleChatSubmit(event) {
+  event.preventDefault();
+  const input = ui['chat-input'];
+  const text = input.value.trim();
+  const channel = call?.channel;
+  if (!text || text.length > maxChatLength || channel?.readyState !== 'open') return;
+  try {
+    channel.send(JSON.stringify({ type: 'chat', text }));
+  } catch {
+    ui['chat-status'].textContent = 'Message could not be sent. Try again.';
+    ui['chat-status'].hidden = false;
+    return;
+  }
+  addChatMessage(text, true);
+  input.value = '';
+  updateChatAvailability();
+  input.focus();
+}
+
 function sendCaption(session, message) {
   if (session.channel?.readyState === 'open') session.channel.send(JSON.stringify(message));
 }
 
 function connectChannel(session, channel) {
   session.channel = channel;
-  channel.onopen = () => sendCaption(session, { type: 'language', locale: ui.spoken.value });
+  channel.onopen = () => {
+    if (call !== session) return;
+    updateChatAvailability();
+    sendCaption(session, { type: 'language', locale: ui.spoken.value });
+  };
+  channel.onclose = () => {
+    if (call === session) updateChatAvailability();
+  };
   channel.onmessage = event => {
-    if (call !== session || typeof event.data !== 'string' || event.data.length > 4500) return;
+    if (call !== session || typeof event.data !== 'string' || event.data.length > 8192) return;
     try {
       const message = JSON.parse(event.data);
-      if (!Object.hasOwn(languages, message.locale)) return;
+      if (message?.type === 'chat') {
+        if (typeof message.text === 'string' && message.text.length <= maxChatLength && message.text.trim()) {
+          addChatMessage(message.text.trim(), false);
+        }
+        return;
+      }
+      if (!message || !Object.hasOwn(languages, message.locale)) return;
       if (message.type === 'language') {
         session.remoteLocale = message.locale;
         if (!captionSession) ui.source.value = message.locale;
       }
       if (message.type === 'caption' && typeof message.text === 'string') showCaption(message);
     } catch {
-      // Ignore messages outside the caption protocol.
+      // Ignore messages outside the call data protocol.
     }
   };
 }
@@ -180,6 +255,12 @@ function leave(message, state = 'idle') {
   ui.local.srcObject = ui.remote.srcObject = null;
   ui.self.hidden = true;
   ui.history.replaceChildren();
+  ui['chat-messages'].replaceChildren();
+  ui['chat-input'].value = '';
+  unreadChat = 0;
+  ui['chat-label'].textContent = 'Chat';
+  openChat(false);
+  updateChatAvailability();
   inviteId = null;
   if (invited) history.replaceState(null, '', location.pathname);
   activateControls(false);
@@ -426,6 +507,9 @@ async function toggleCaptions() {
   }
 }
 
+ui['chat-toggle'].addEventListener('click', () => openChat(ui['chat-panel'].hidden));
+ui['chat-input'].addEventListener('input', updateChatAvailability);
+ui['chat-form'].addEventListener('submit', handleChatSubmit);
 ui.start.addEventListener('click', start);
 ui.end.addEventListener('click', () => leave('You left the call'));
 ui.captions.addEventListener('click', toggleCaptions);

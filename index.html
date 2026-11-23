@@ -36,8 +36,19 @@
           <button id="mic" disabled aria-pressed="true"><span class="icon"></span><span>Mic</span></button>
           <button id="camera" disabled aria-pressed="true"><span class="icon"></span><span>Camera</span></button>
           <button id="captions" disabled aria-pressed="false"><span class="icon"></span><span>Captions</span></button>
+          <button id="chat-toggle" disabled aria-expanded="false" aria-controls="chat-panel"><span class="icon"></span><span id="chat-label">Chat</span></button>
           <button id="end" class="end" disabled><span class="icon"></span><span>Leave</span></button>
         </div>
+        <section id="chat-panel" class="chat" aria-labelledby="chat-title" hidden>
+          <h2 id="chat-title">Room chat</h2>
+          <p id="chat-status" role="status">Chat opens when your call connects.</p>
+          <div id="chat-messages" role="log" aria-label="Chat messages" tabindex="0"></div>
+          <form id="chat-form">
+            <label for="chat-input" class="visually-hidden">Message</label>
+            <input id="chat-input" type="text" placeholder="Write a message" maxlength="1000" autocomplete="off" enterkeyhint="send" disabled>
+            <button id="chat-send" type="submit" disabled>Send</button>
+          </form>
+        </section>
       </section>
       <aside class="sidebar" aria-label="Caption settings and history">
         <section class="settings">
