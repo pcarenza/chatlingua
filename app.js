@@ -245,6 +245,8 @@ function showCaption({ text, locale }) {
   if (!current || !text.trim()) return;
   current.queue = current.queue.then(async () => {
     if (captionSession !== current) return;
+    await current.translationReady;
+    if (captionSession !== current) return;
     let display = text;
     let label = languages[locale];
     if (locale === current.source && current.translator) {
@@ -274,7 +276,8 @@ function showCaption({ text, locale }) {
 function listen(current) {
   if (!current.recognition || current.speechFailed || current.listening || !current.call.stream.getAudioTracks()[0].enabled) return;
   try {
-    current.recognition.start();
+    if (current.localSpeech) current.recognition.start(current.call.stream.getAudioTracks()[0]);
+    else current.recognition.start();
     current.listening = true;
   } catch {
     speechUnavailable(current, 'could not start');
@@ -328,14 +331,15 @@ async function toggleCaptions() {
   const targetLanguage = current.target.split('-')[0];
   try {
     captionStatus('Preparing captions. This may download language packs.');
-    const [localSpeech] = await Promise.all([
-      android ? false : prepareLocalSpeech(Recognition, current.spoken),
-      prepareTranslation(current, sourceLanguage, targetLanguage),
-    ]);
-    if (captionSession !== current) return;
+    current.translationReady = prepareTranslation(current, sourceLanguage, targetLanguage);
     const onText = text => {
       if (captionSession !== current || !current.call.stream.getAudioTracks()[0].enabled) return;
+      if (!text.trim()) return;
+      if (current.call.channel?.readyState !== 'open') {
+        return captionStatus('Your microphone is transcribing. Waiting for the call connection to send captions.');
+      }
       sendCaption(current.call, { type: 'caption', locale: current.spoken, text: text.slice(0, 600) });
+      captionStatus('Your speech was sent as a caption. Waiting for your partner’s next phrase.');
     };
     const onError = error => {
       if (captionSession === current && !['no-speech', 'aborted'].includes(error)) {
@@ -354,7 +358,9 @@ async function toggleCaptions() {
       });
     } else if (Recognition) {
       const recognition = current.recognition = new Recognition();
-      if (localSpeech) recognition.processLocally = true;
+      current.localSpeech = await prepareLocalSpeech(Recognition, current.spoken);
+      if (captionSession !== current) return;
+      if (current.localSpeech) recognition.processLocally = true;
       recognition.lang = current.spoken;
       recognition.continuous = true;
       recognition.onresult = event => {
@@ -367,8 +373,14 @@ async function toggleCaptions() {
       recognition.onend = onEnd;
     }
     if (!current.recognition) speechUnavailable(current, 'unsupported browser');
-    else if (current.translationUnavailable) captionStatus('Translation is unavailable. Incoming captions will show the original language.');
-    else captionStatus('Captions are on. Waiting for your call partner to speak.');
+    else {
+      captionStatus('Listening for speech. Captions appear after each completed phrase.');
+      current.translationReady.then(() => {
+        if (captionSession === current && !current.speechFailed && current.translationUnavailable) {
+          captionStatus('Translation is unavailable. Incoming captions will show the original language.');
+        }
+      });
+    }
     sendCaption(current.call, { type: 'language', locale: current.spoken });
     listen(current);
   } catch (error) {
