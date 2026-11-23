@@ -59,10 +59,26 @@ function activateControls(active) {
   ui.invite.textContent = android ? 'Share invite link' : 'Copy invite link';
 }
 
+function retryableSignal(error) {
+  return error instanceof TypeError || [429, 502, 503, 504].includes(error.status);
+}
+
 function signal(session, type, payload) {
-  return request('/' + session.id + '/signals', {
-    token: session.token, method: 'POST', body: { type, payload },
-  });
+  const send = async () => {
+    for (let attempt = 0; call === session; attempt++) {
+      try {
+        return await request('/' + session.id + '/signals', {
+          token: session.token, method: 'POST', body: { type, payload },
+        });
+      } catch (error) {
+        if (!retryableSignal(error) || attempt >= 4) throw error;
+        await new Promise(resolve => setTimeout(resolve, 150 * 2 ** attempt));
+      }
+    }
+  };
+  const pending = session.outbound.then(send);
+  session.outbound = pending.catch(() => {});
+  return pending;
 }
 
 function showRemote(session) {
@@ -103,6 +119,7 @@ async function applySignal(session, { type, payload }) {
     else session.candidates.push(payload);
   }
   if (type === 'offer' || type === 'answer') {
+    if (peer.remoteDescription?.type === payload.type && peer.remoteDescription.sdp === payload.sdp) return;
     await peer.setRemoteDescription(payload);
     for (const candidate of session.candidates.splice(0)) await peer.addIceCandidate(candidate);
     if (type === 'offer') {
@@ -131,19 +148,21 @@ async function poll(session) {
         await session.peer.setLocalDescription(await session.peer.createOffer());
         await signal(session, 'offer', session.peer.localDescription);
       }
-      await signal(session, 'media', { camera: session.stream.getVideoTracks()[0].enabled });
+      signal(session, 'media', { camera: session.stream.getVideoTracks()[0].enabled }).catch(() => {});
     }
     for (const message of result.messages) {
       if (call !== session) return;
       await applySignal(session, message.data);
       session.cursor = message.sequence;
     }
-    session.failures = 0;
+    session.signalFailureAt = undefined;
   } catch (error) {
     if (call !== session) return;
     if (error.status === 410 || error.status === 403) return leave('Call ended');
-    if (++session.failures >= 3 || !(error instanceof TypeError)) {
-      return leave('The call connection was interrupted.', 'error');
+    if (!retryableSignal(error)) return leave('The call connection was interrupted.', 'error');
+    session.signalFailureAt ??= Date.now();
+    if (session.peer.connectionState !== 'connected' && Date.now() - session.signalFailureAt >= 20_000) {
+      return leave('The call server could not reconnect.', 'error');
     }
   }
   if (call === session) session.pollTimer = setTimeout(() => poll(session), 950);
@@ -176,7 +195,7 @@ async function start() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera and microphone require HTTPS or localhost.');
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     const info = await request(inviteId ? '/' + encodeURIComponent(inviteId) + '/join' : '', { method: 'POST' });
-    const session = { ...info, stream, candidates: [], cursor: 0, failures: 0, remoteCamera: true };
+    const session = { ...info, stream, candidates: [], cursor: 0, outbound: Promise.resolve(), remoteCamera: true };
     call = session;
     const peer = session.peer = new RTCPeerConnection({ iceServers: info.iceServers });
     for (const track of stream.getTracks()) peer.addTrack(track, stream);
