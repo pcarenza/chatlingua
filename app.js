@@ -94,6 +94,94 @@ function showRemote(session) {
 const maxChatLength = 1000;
 let unreadChat = 0;
 
+function languageCode(locale) {
+  return locale.split('-')[0];
+}
+
+function closeTranslator(session) {
+  const active = session.translation;
+  session.translation = undefined;
+  active?.translator?.destroy();
+}
+
+function getTranslator(session, source, target) {
+  const active = session.translation;
+  if (active?.source === source && active.target === target) return active.ready;
+  closeTranslator(session);
+  const model = { source, target };
+  session.translation = model;
+  model.ready = (async () => {
+    try {
+      const translator = android
+        ? await androidTranslator(source, target)
+        : await globalThis.Translator.create({ sourceLanguage: source, targetLanguage: target });
+      if (call !== session || session.translation !== model) {
+        translator.destroy();
+        return;
+      }
+      model.translator = translator;
+      return translator;
+    } catch {
+      if (session.translation === model) session.translation = undefined;
+    }
+  })();
+  return model.ready;
+}
+
+async function translateText(translator, text) {
+  if (!android || text.length <= 600) return translator.translate(text);
+  const characters = Array.from(text);
+  const parts = [];
+  while (characters.length) {
+    const limit = Math.min(characters.length, 300);
+    let split = limit;
+    if (limit < characters.length) {
+      while (split > 0 && !/\s/u.test(characters[split])) split--;
+      if (split === 0) split = limit;
+    }
+    parts.push(characters.splice(0, split).join(''));
+  }
+  const translated = await Promise.all(parts.map(part => translator.translate(part.trim())));
+  return translated.join(' ');
+}
+
+function translatePendingChat(session) {
+  if (!session || !session.pendingChat.size) return;
+  for (const [message, entry] of session.pendingChat) {
+    const target = ui.target.value;
+    const source = languageCode(entry.locale);
+    if (source === languageCode(target)) {
+      entry.sender.textContent = 'Partner';
+      session.pendingChat.delete(message);
+      continue;
+    }
+    if (entry.translating === target) continue;
+    entry.translating = target;
+    entry.sender.textContent = 'Partner · Original';
+    getTranslator(session, source, languageCode(target)).then(async translator => {
+      if (!translator || call !== session || entry.translating !== target) return;
+      const translated = await translateText(translator, entry.text);
+      if (call !== session || entry.translating !== target || ui.target.value !== target || !translated?.trim()) return;
+      entry.body.textContent = translated;
+      entry.sender.textContent = 'Partner · ' + languages[target];
+      session.pendingChat.delete(message);
+    }).catch(() => {
+      // Keep the original when the device cannot translate this message.
+    }).finally(() => {
+      if (entry.translating === target) entry.translating = undefined;
+    });
+  }
+}
+
+function prepareChat() {
+  const session = call;
+  if (!session) return;
+  if (session.pendingChat.size) return translatePendingChat(session);
+  const source = languageCode(session.remoteLocale || ui.source.value);
+  const target = languageCode(ui.target.value);
+  if (source !== target) getTranslator(session, source, target);
+}
+
 function updateChatAvailability() {
   const ready = call?.channel?.readyState === 'open';
   ui['chat-input'].disabled = !ready;
@@ -109,10 +197,11 @@ function openChat(open) {
     unreadChat = 0;
     ui['chat-label'].textContent = 'Chat';
     ui['chat-messages'].scrollTop = ui['chat-messages'].scrollHeight;
+    prepareChat();
   }
 }
 
-function addChatMessage(text, fromSelf) {
+function addChatMessage(text, fromSelf, locale) {
   const message = document.createElement('article');
   message.className = fromSelf ? 'chat-message from-self' : 'chat-message';
   const sender = document.createElement('small');
@@ -124,7 +213,14 @@ function addChatMessage(text, fromSelf) {
   const log = ui['chat-messages'];
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
   log.append(message);
-  if (log.childElementCount > 200) log.firstElementChild.remove();
+  if (log.childElementCount > 200) {
+    call?.pendingChat.delete(log.firstElementChild);
+    log.firstElementChild.remove();
+  }
+  if (!fromSelf && locale && call) {
+    call.pendingChat.set(message, { text, locale, sender, body });
+    translatePendingChat(call);
+  }
   if (fromSelf || atBottom) log.scrollTop = log.scrollHeight;
   if (!fromSelf && ui['chat-panel'].hidden) {
     unreadChat++;
@@ -139,7 +235,7 @@ function handleChatSubmit(event) {
   const channel = call?.channel;
   if (!text || text.length > maxChatLength || channel?.readyState !== 'open') return;
   try {
-    channel.send(JSON.stringify({ type: 'chat', text }));
+    channel.send(JSON.stringify({ type: 'chat', text, locale: ui.spoken.value }));
   } catch {
     ui['chat-status'].textContent = 'Message could not be sent. Try again.';
     ui['chat-status'].hidden = false;
@@ -171,7 +267,8 @@ function connectChannel(session, channel) {
       const message = JSON.parse(event.data);
       if (message?.type === 'chat') {
         if (typeof message.text === 'string' && message.text.length <= maxChatLength && message.text.trim()) {
-          addChatMessage(message.text.trim(), false);
+          const locale = Object.hasOwn(languages, message.locale) ? message.locale : session.remoteLocale;
+          addChatMessage(message.text.trim(), false, locale);
         }
         return;
       }
@@ -248,6 +345,8 @@ function leave(message, state = 'idle') {
   if (!session) return;
   call = undefined;
   clearTimeout(session.pollTimer);
+  closeTranslator(session);
+  session.pendingChat.clear();
   stopCaptions();
   session.peer?.close();
   session.stream.getTracks().forEach(track => track.stop());
@@ -276,7 +375,7 @@ async function start() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera and microphone require HTTPS or localhost.');
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     const info = await request(inviteId ? '/' + encodeURIComponent(inviteId) + '/join' : '', { method: 'POST' });
-    const session = { ...info, stream, candidates: [], cursor: 0, outbound: Promise.resolve(), remoteCamera: true };
+    const session = { ...info, stream, candidates: [], cursor: 0, outbound: Promise.resolve(), pendingChat: new Map(), remoteCamera: true };
     call = session;
     const peer = session.peer = new RTCPeerConnection({ iceServers: info.iceServers });
     for (const track of stream.getTracks()) peer.addTrack(track, stream);
@@ -332,7 +431,6 @@ function stopCaptions(message = 'Turn on captions during the call.') {
   captionSession = undefined;
   if (current?.recognition?.destroy) current.recognition.destroy();
   else current?.recognition?.abort();
-  current?.translator?.destroy();
   for (const select of [ui.spoken, ui.source, ui.target]) select.disabled = false;
   ui.captions.setAttribute('aria-pressed', 'false');
   ui.overlay.hidden = true;
@@ -347,9 +445,10 @@ function showCaption({ text, locale }) {
     if (captionSession !== current) return;
     let display = text;
     let label = languages[locale];
-    if (locale === current.source && current.translator) {
+    const model = current.call.translation;
+    if (locale === current.source && model?.source === languageCode(locale) && model.target === languageCode(current.target) && model.translator) {
       try {
-        display = await current.translator.translate(text);
+        display = await model.translator.translate(text);
         label = languages[current.target];
       } catch {
         label += ' · Original';
@@ -408,15 +507,8 @@ async function prepareLocalSpeech(Recognition, locale) {
 
 async function prepareTranslation(current, source, target) {
   if (source === target) return;
-  try {
-    const translator = android
-      ? await androidTranslator(source, target)
-      : await globalThis.Translator.create({ sourceLanguage: source, targetLanguage: target });
-    if (captionSession !== current) return translator.destroy();
-    current.translator = translator;
-  } catch {
-    current.translationUnavailable = true;
-  }
+  const translator = await getTranslator(current.call, source, target);
+  current.translationUnavailable = !translator;
 }
 
 async function toggleCaptions() {
@@ -509,6 +601,11 @@ async function toggleCaptions() {
 
 ui['chat-toggle'].addEventListener('click', () => openChat(ui['chat-panel'].hidden));
 ui['chat-input'].addEventListener('input', updateChatAvailability);
+for (const select of [ui.source, ui.target]) {
+  select.addEventListener('change', () => {
+    if (!ui['chat-panel'].hidden) prepareChat();
+  });
+}
 ui['chat-form'].addEventListener('submit', handleChatSubmit);
 ui.start.addEventListener('click', start);
 ui.end.addEventListener('click', () => leave('You left the call'));
