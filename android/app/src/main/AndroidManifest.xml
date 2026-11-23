@@ -2,6 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <queries><intent><action android:name="android.speech.RecognitionService"/></intent></queries>
     <application android:label="ChatLingua" android:allowBackup="false" android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.NoActionBar">

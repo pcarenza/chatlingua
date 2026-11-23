@@ -251,7 +251,7 @@ function showCaption({ text, locale }) {
       display = await current.translator.translate(text);
       label = languages[current.target];
     } else if (locale.split('-')[0] !== current.target.split('-')[0]) {
-      captionStatus('The speaker’s language changed. Turn captions off, update “They speak”, and turn captions back on.');
+      if (locale !== current.source && !current.speechFailed) captionStatus('The speaker’s language changed. Turn captions off, update “They speak”, and turn captions back on.');
       label += ' · Original';
     }
     if (captionSession !== current) return;
@@ -272,12 +272,44 @@ function showCaption({ text, locale }) {
 }
 
 function listen(current) {
-  if (current.listening || !current.call.stream.getAudioTracks()[0].enabled) return;
+  if (!current.recognition || current.speechFailed || current.listening || !current.call.stream.getAudioTracks()[0].enabled) return;
   try {
     current.recognition.start();
     current.listening = true;
   } catch {
-    stopCaptions('Speech recognition could not start. Turn captions on to retry.');
+    speechUnavailable(current, 'could not start');
+  }
+}
+
+function speechUnavailable(current, reason) {
+  current.speechFailed = true;
+  const retry = android ? 'Turn captions off and back on to retry.' : 'Open the call in Google Chrome and turn captions on to retry.';
+  captionStatus('Your speech could not be transcribed (' + reason + '). Incoming captions are still on. ' + retry);
+}
+
+async function prepareLocalSpeech(Recognition, locale) {
+  if (!Recognition?.available || !Recognition.install || !('processLocally' in Recognition.prototype)) return false;
+  const options = { langs: [locale], processLocally: true, quality: 'conversation' };
+  try {
+    const availability = await Recognition.available(options);
+    if (availability === 'available') return true;
+    if (availability === 'unavailable') return false;
+    return await Recognition.install(options);
+  } catch {
+    return false;
+  }
+}
+
+async function prepareTranslation(current, source, target) {
+  if (source === target) return;
+  try {
+    const translator = android
+      ? await androidTranslator(source, target)
+      : await globalThis.Translator.create({ sourceLanguage: source, targetLanguage: target });
+    if (captionSession !== current) return translator.destroy();
+    current.translator = translator;
+  } catch {
+    current.translationUnavailable = true;
   }
 }
 
@@ -285,7 +317,6 @@ async function toggleCaptions() {
   if (!call) return;
   if (captionSession) return stopCaptions('Captions are off.');
   const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
-  if (!android && !Recognition) return captionStatus('Speech recognition is unavailable in this browser. Try desktop Chrome.');
   const current = {
     call, spoken: ui.spoken.value, source: ui.source.value, target: ui.target.value,
     queue: Promise.resolve(),
@@ -296,22 +327,19 @@ async function toggleCaptions() {
   const sourceLanguage = current.source.split('-')[0];
   const targetLanguage = current.target.split('-')[0];
   try {
-    if (sourceLanguage !== targetLanguage) {
-      if (!android && !globalThis.Translator) throw new Error('Translation is unavailable in this browser. Try desktop Chrome.');
-      captionStatus('Preparing translation. The language model may need to download.');
-      const translator = android
-        ? await androidTranslator(sourceLanguage, targetLanguage)
-        : await globalThis.Translator.create({ sourceLanguage, targetLanguage });
-      if (captionSession !== current) return translator.destroy();
-      current.translator = translator;
-    }
+    captionStatus('Preparing captions. This may download language packs.');
+    const [localSpeech] = await Promise.all([
+      android ? false : prepareLocalSpeech(Recognition, current.spoken),
+      prepareTranslation(current, sourceLanguage, targetLanguage),
+    ]);
+    if (captionSession !== current) return;
     const onText = text => {
       if (captionSession !== current || !current.call.stream.getAudioTracks()[0].enabled) return;
       sendCaption(current.call, { type: 'caption', locale: current.spoken, text: text.slice(0, 600) });
     };
     const onError = error => {
       if (captionSession === current && !['no-speech', 'aborted'].includes(error)) {
-        stopCaptions('Speech recognition is unavailable (' + error + '). Turn captions on to retry.');
+        speechUnavailable(current, error);
       }
     };
     const onEnd = () => {
@@ -324,8 +352,9 @@ async function toggleCaptions() {
       current.recognition = androidRecognition(current.call.stream, current.spoken, {
         onresult: onText, onerror: onError, onend: onEnd,
       });
-    } else {
+    } else if (Recognition) {
       const recognition = current.recognition = new Recognition();
+      if (localSpeech) recognition.processLocally = true;
       recognition.lang = current.spoken;
       recognition.continuous = true;
       recognition.onresult = event => {
@@ -337,11 +366,13 @@ async function toggleCaptions() {
       recognition.onerror = event => onError(event.error);
       recognition.onend = onEnd;
     }
-    captionStatus('Captions are on. Waiting for your call partner to speak.');
+    if (!current.recognition) speechUnavailable(current, 'unsupported browser');
+    else if (current.translationUnavailable) captionStatus('Translation is unavailable. Incoming captions will show the original language.');
+    else captionStatus('Captions are on. Waiting for your call partner to speak.');
     sendCaption(current.call, { type: 'language', locale: current.spoken });
     listen(current);
   } catch (error) {
-    if (captionSession === current) stopCaptions(error.message || 'Could not prepare translation.');
+    if (captionSession === current) speechUnavailable(current, error.message || 'setup failed');
   }
 }
 
