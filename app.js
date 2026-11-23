@@ -245,13 +245,16 @@ function showCaption({ text, locale }) {
   if (!current || !text.trim()) return;
   current.queue = current.queue.then(async () => {
     if (captionSession !== current) return;
-    await current.translationReady;
-    if (captionSession !== current) return;
     let display = text;
     let label = languages[locale];
     if (locale === current.source && current.translator) {
-      display = await current.translator.translate(text);
-      label = languages[current.target];
+      try {
+        display = await current.translator.translate(text);
+        label = languages[current.target];
+      } catch {
+        label += ' · Original';
+        if (!current.speechFailed) captionStatus('Translation failed for this phrase. Showing the original caption.');
+      }
     } else if (locale.split('-')[0] !== current.target.split('-')[0]) {
       if (locale !== current.source && !current.speechFailed) captionStatus('The speaker’s language changed. Turn captions off, update “They speak”, and turn captions back on.');
       label += ' · Original';
@@ -339,6 +342,7 @@ async function toggleCaptions() {
         return captionStatus('Your microphone is transcribing. Waiting for the call connection to send captions.');
       }
       sendCaption(current.call, { type: 'caption', locale: current.spoken, text: text.slice(0, 600) });
+      current.sentCaption = true;
       captionStatus('Your speech was sent as a caption. Waiting for your partner’s next phrase.');
     };
     const onError = error => {
@@ -363,10 +367,20 @@ async function toggleCaptions() {
       if (current.localSpeech) recognition.processLocally = true;
       recognition.lang = current.spoken;
       recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onaudiostart = () => {
+        if (captionSession === current && !current.sentCaption) captionStatus('Microphone active. Speak a short phrase, then pause.');
+      };
+      recognition.onspeechstart = () => {
+        if (captionSession === current && !current.sentCaption) captionStatus('Speech detected. Waiting for a complete phrase.');
+      };
       recognition.onresult = event => {
         for (let index = event.resultIndex; index < event.results.length; index++) {
           const result = event.results[index];
           if (result.isFinal) onText(result[0].transcript);
+          else if (captionSession === current && result[0].transcript.trim()) {
+            captionStatus('Speech recognized: ' + result[0].transcript.slice(0, 100));
+          }
         }
       };
       recognition.onerror = event => onError(event.error);
@@ -374,10 +388,10 @@ async function toggleCaptions() {
     }
     if (!current.recognition) speechUnavailable(current, 'unsupported browser');
     else {
-      captionStatus('Listening for speech. Captions appear after each completed phrase.');
+      captionStatus(android ? 'Starting Android speech recognition…' : 'Starting speech recognition…');
       current.translationReady.then(() => {
         if (captionSession === current && !current.speechFailed && current.translationUnavailable) {
-          captionStatus('Translation is unavailable. Incoming captions will show the original language.');
+          if (!current.sentCaption) captionStatus('Translation is unavailable. Incoming captions will show the original language.');
         }
       });
     }
