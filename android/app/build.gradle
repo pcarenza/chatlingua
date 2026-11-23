@@ -1,5 +1,11 @@
 plugins { id 'com.android.application' version '8.5.2' }
+def cloudflareBuild = providers.gradleProperty('chatlinguaCloudflare').orElse('false').get().toBoolean()
+def chatlinguaHost = cloudflareBuild
+    ? 'chatlingua.pcarenza.workers.dev'
+    : 'chatlingua-video-calls.goldencurl1.chatgpt.site'
+
 android {
+    buildFeatures { buildConfig true }
     namespace 'com.chatlingua.app'
     compileSdk 34
     compileOptions {
@@ -7,7 +13,12 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     defaultConfig {
-        applicationId 'com.chatlingua.app'
+        applicationId cloudflareBuild ? 'com.chatlingua.app.cloudflare' : 'com.chatlingua.app'
+        buildConfigField 'String', 'CHATLINGUA_ORIGIN', '"' + 'https://' + chatlinguaHost + '"'
+        manifestPlaceholders = [
+            chatlinguaHost: chatlinguaHost,
+            chatlinguaLabel: cloudflareBuild ? 'ChatLingua Cloudflare' : 'ChatLingua',
+        ]
         minSdk 33
         targetSdk 34
         versionCode 3

@@ -1,0 +1,16 @@
+name = "chatlingua"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-11-23"
+account_id = "d1196e0aa20018c3bd23d655f464519c"
+workers_dev = true
+
+[build]
+command = "node build-site.js"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomService"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomService"]

@@ -3,5 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {"start": "node server.js"}
+  "scripts": {
+    "start": "node server.js",
+    "build:worker": "node build-site.js",
+    "dev:cloudflare": "npx --yes wrangler@4.167.0 dev",
+    "deploy:cloudflare": "npx --yes wrangler@4.167.0 deploy"
+  }
 }

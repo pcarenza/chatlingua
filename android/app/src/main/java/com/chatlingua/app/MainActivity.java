@@ -31,7 +31,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public final class MainActivity extends Activity {
-    private static final String ORIGIN = "https://chatlingua-video-calls.goldencurl1.chatgpt.site";
+    private static final String ORIGIN = BuildConfig.CHATLINGUA_ORIGIN;
     private static final String CAMERA = Manifest.permission.CAMERA;
     private static final String MIC = Manifest.permission.RECORD_AUDIO;
     private final ThreadPoolExecutor audioQueue = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
