@@ -358,6 +358,11 @@ async function toggleCaptions() {
     };
     if (android) {
       current.recognition = androidRecognition(current.call.stream, current.spoken, {
+        onready() {
+          if (captionSession === current && !current.sentCaption) {
+            captionStatus('Android speech recognition is ready. Speak a short phrase, then pause.');
+          }
+        },
         onresult: onText, onerror: onError, onend: onEnd,
       });
     } else if (Recognition) {

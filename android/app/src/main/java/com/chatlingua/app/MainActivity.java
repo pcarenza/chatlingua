@@ -142,17 +142,28 @@ public final class MainActivity extends Activity {
             audio = new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]);
             recognizer = SpeechRecognizer.createSpeechRecognizer(this);
             recognizer.setRecognitionListener(new RecognitionListener() {
-                @Override public void onReadyForSpeech(Bundle parameters) {}
+                @Override public void onReadyForSpeech(Bundle parameters) {
+                    if (speechId == id) reply("androidSpeechReady", id, "");
+                }
                 @Override public void onBeginningOfSpeech() {}
                 @Override public void onRmsChanged(float rms) {}
                 @Override public void onBufferReceived(byte[] buffer) {}
                 @Override public void onEndOfSpeech() {}
                 @Override public void onPartialResults(Bundle results) {}
                 @Override public void onEvent(int type, Bundle parameters) {}
-                @Override public void onResults(Bundle results) {
+                private void sendResult(Bundle results) {
                     if (speechId != id) return;
                     ArrayList<String> words = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                     if (words != null && !words.isEmpty()) reply("androidSpeechResult", id, words.get(0));
+                }
+                @Override public void onSegmentResults(Bundle results) {
+                    sendResult(results);
+                }
+                @Override public void onEndOfSegmentedSession() {
+                    end();
+                }
+                @Override public void onResults(Bundle results) {
+                    sendResult(results);
                     end();
                 }
                 @Override public void onError(int code) {
@@ -164,6 +175,7 @@ public final class MainActivity extends Activity {
                 }
                 private void end() {
                     if (speechId != id) return;
+                    speechId = 0;
                     stopSpeech();
                     reply("androidSpeechEnd", id, "");
                 }
@@ -172,6 +184,7 @@ public final class MainActivity extends Activity {
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
                 .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, pipe[0])
+                .putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, RecognizerIntent.EXTRA_AUDIO_SOURCE)
                 .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
                 .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, android.media.AudioFormat.ENCODING_PCM_16BIT)
                 .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, rate);

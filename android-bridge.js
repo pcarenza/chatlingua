@@ -40,6 +40,9 @@ export async function androidTranslator(source, target) {
 }
 
 let active;
+globalThis.androidSpeechReady = id => {
+  if (active?.id === id) active.onready();
+};
 globalThis.androidSpeechResult = (id, text) => {
   if (active?.id === id) active.onresult(text);
 };
