@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10191a">
+  <title>ChatLingua — Video calls with live translation</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">文<span>A</span></span> Chat<span>Lingua</span></div>
+    <button id="invite" hidden>Copy invite link</button>
+  </header>
+  <main>
+    <div class="intro">
+      <div><h1>Video call</h1><p id="description">Talk in your language. Read captions in yours.</p></div>
+      <span id="status" role="status" class="status" data-state="idle">Ready to start</span>
+    </div>
+    <div class="layout">
+      <section class="call" aria-label="Video call">
+        <div class="stage">
+          <video id="remote" autoplay playsinline></video>
+          <div id="placeholder" class="placeholder">
+            <div id="camera-icon" class="hero-icon" aria-hidden="true"></div>
+            <h2 id="stage-title">Start a conversation</h2>
+            <p id="stage-description">Create a room and share the invite link with one person.</p>
+            <button id="start" class="primary">Create room</button>
+            <button id="join-link">Join with invite</button>
+          </div>
+          <div id="self" class="self" hidden><video id="local" autoplay playsinline muted></video><span>You</span></div>
+          <div id="overlay" class="overlay" hidden></div>
+        </div>
+        <div class="controls" aria-label="Call controls">
+          <button id="mic" disabled aria-pressed="true"><span class="icon"></span><span>Mic</span></button>
+          <button id="camera" disabled aria-pressed="true"><span class="icon"></span><span>Camera</span></button>
+          <button id="captions" disabled aria-pressed="false"><span class="icon"></span><span>Captions</span></button>
+          <button id="end" class="end" disabled><span class="icon"></span><span>Leave</span></button>
+        </div>
+      </section>
+      <aside class="sidebar" aria-label="Caption settings and history">
+        <section class="settings">
+          <h2>Caption languages</h2>
+          <label>I speak <select id="spoken"></select></label>
+          <label>They speak <select id="source"></select></label>
+          <label>Show captions in <select id="target"></select></label>
+        </section>
+        <section class="transcript" aria-label="Caption history">
+          <h2>Live captions</h2>
+          <p id="caption-status" role="status">Turn on captions after you enter the call.</p>
+          <div id="history" role="log" aria-label="Caption history"></div>
+        </section>
+      </aside>
+    </div>
+    <p class="footnote">For translated captions, use desktop Chrome or the ChatLingua Android app. Both speakers need to turn on captions.</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,7 @@
+dist/
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+.openai/*.tar.gz
+outputs/
