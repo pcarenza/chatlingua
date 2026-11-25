@@ -41,6 +41,20 @@ Contact name|Nombre del contacto|Nom du contact|Nome do contato
 Contact code|Código de contacto|Code du contact|Código do contato
 Save contact|Guardar contacto|Enregistrer le contact|Salvar contato
 Saved contacts|Contactos guardados|Contacts enregistrés|Contatos salvos
+Devices|Dispositivos|Appareils|Dispositivos
+Microphone|Micrófono|Microphone|Microfone
+Default|Predeterminado|Par défaut|Padrão
+Microphone {number}|Micrófono {number}|Microphone {number}|Microfone {number}
+Camera {number}|Cámara {number}|Caméra {number}|Câmera {number}
+Speaker {number}|Altavoz {number}|Haut-parleur {number}|Alto-falante {number}
+Earpiece|Auricular|Écouteur interne|Fone de ouvido do aparelho
+Bluetooth headset|Auriculares Bluetooth|Casque Bluetooth|Fone Bluetooth
+Wired headset|Auriculares con cable|Casque filaire|Fone com fio
+USB headset|Auriculares USB|Casque USB|Fone USB
+Captions use your system default microphone.|Los subtítulos usan el micrófono predeterminado del sistema.|Les sous-titres utilisent le micro par défaut du système.|As legendas usam o microfone padrão do sistema.
+Could not switch to that microphone.|No se pudo cambiar a ese micrófono.|Impossible de passer à ce microphone.|Não foi possível trocar para esse microfone.
+Could not switch to that camera.|No se pudo cambiar a esa cámara.|Impossible de passer à cette caméra.|Não foi possível trocar para essa câmera.
+Could not switch to that speaker.|No se pudo cambiar a ese altavoz.|Impossible de passer à ce haut-parleur.|Não foi possível trocar para esse alto-falante.
 Caption languages|Idiomas de los subtítulos|Langues des sous-titres|Idiomas das legendas
 I speak|Yo hablo|Je parle|Eu falo
 They speak|Mi interlocutor habla|Mon interlocuteur parle|A outra pessoa fala

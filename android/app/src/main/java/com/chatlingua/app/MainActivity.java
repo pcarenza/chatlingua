@@ -4,6 +4,9 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
@@ -22,6 +25,8 @@ import android.webkit.WebViewClient;
 import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.TranslatorOptions;
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import androidx.core.content.FileProvider;
 import java.io.File;
@@ -48,6 +53,37 @@ public final class MainActivity extends Activity {
     private long speechId;
     private Translator translator;
     private long translatorId;
+    private AudioManager audioManager;
+    private boolean changedAudioMode;
+    private boolean routedAudio;
+    private final AudioDeviceCallback deviceCallback = new AudioDeviceCallback() {
+        @Override public void onAudioDevicesAdded(AudioDeviceInfo[] added) { notifyAudioDevices(); }
+        @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) { notifyAudioDevices(); }
+    };
+
+    private void notifyAudioDevices() {
+        if (!isDestroyed()) web.evaluateJavascript("window.androidAudioDevicesChanged?.()", null);
+    }
+
+    private static String outputName(AudioDeviceInfo device) {
+        return switch (device.getType()) {
+            case AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Earpiece";
+            case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Speaker";
+            case AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth headset";
+            case AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired headset";
+            case AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset";
+            default -> null;
+        };
+    }
+
+    private void clearAudioOutput() {
+        routedAudio = false;
+        audioManager.clearCommunicationDevice();
+        if (changedAudioMode) {
+            audioManager.setMode(AudioManager.MODE_NORMAL);
+            changedAudioMode = false;
+        }
+    }
 
     private boolean trusted(Uri url) {
         return url != null && "https".equals(url.getScheme())
@@ -99,6 +135,8 @@ public final class MainActivity extends Activity {
                 if (pendingPermission == request) pendingPermission = null;
             }
         });
+        audioManager = getSystemService(AudioManager.class);
+        audioManager.registerAudioDeviceCallback(deviceCallback, null);
         setContentView(web);
         Uri link = getIntent().getData();
         web.loadUrl(trusted(link) ? link.toString() : ORIGIN + "/");
@@ -255,6 +293,42 @@ public final class MainActivity extends Activity {
                 }
             });
         }
+        @JavascriptInterface public String audioOutputs() {
+            JSONArray list = new JSONArray();
+            try {
+                for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+                    String name = outputName(device);
+                    if (name == null) continue;
+                    CharSequence product = device.getProductName();
+                    boolean named = name.equals("Bluetooth headset") || name.equals("USB headset");
+                    list.put(new JSONObject().put("id", Integer.toString(device.getId())).put("name", name)
+                        .put("product", named && product != null ? product.toString() : ""));
+                }
+            } catch (JSONException | RuntimeException ignored) {}
+            return list.toString();
+        }
+        @JavascriptInterface public void setAudioOutput(String id) {
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (id.isEmpty()) {
+                    clearAudioOutput();
+                    return;
+                }
+                for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+                    if (Integer.toString(device.getId()).equals(id)) {
+                        if (audioManager.getMode() == AudioManager.MODE_NORMAL) {
+                            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                            changedAudioMode = true;
+                        }
+                        routedAudio = audioManager.setCommunicationDevice(device);
+                        return;
+                    }
+                }
+            });
+        }
+        @JavascriptInterface public void callEnded() {
+            runOnUiThread(() -> { if (!isDestroyed() && (routedAudio || changedAudioMode)) clearAudioOutput(); });
+        }
         @JavascriptInterface public void share(String url) {
             if (!trusted(Uri.parse(url))) return;
             runOnUiThread(() -> startActivity(Intent.createChooser(
@@ -288,6 +362,8 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         speechId = 0;
         stopSpeech();
+        audioManager.unregisterAudioDeviceCallback(deviceCallback);
+        if (routedAudio || changedAudioMode) clearAudioOutput();
         audioQueue.shutdownNow();
         if (translator != null) translator.close();
         CookieManager.getInstance().flush();

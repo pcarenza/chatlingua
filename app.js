@@ -9,7 +9,7 @@ if (android) get('android-download')?.remove();
 const ui = Object.fromEntries(['invite', 'status', 'remote', 'placeholder', 'stage-title', 'stage-description',
   'start', 'self', 'local', 'overlay', 'mic', 'camera', 'speaker', 'captions', 'end', 'spoken', 'source',
   'target', 'caption-status', 'history', 'chat-toggle', 'chat-label', 'chat-panel', 'chat-status',
-  'chat-messages', 'chat-form', 'chat-input', 'chat-send', 'invite-qr', 'invite-qr-code', 'share-qr'].map(id => [id, get(id)]));
+  'chat-messages', 'mic-device', 'camera-device', 'speaker-device', 'mic-hint', 'speaker-device-label', 'chat-form', 'chat-input', 'chat-send', 'invite-qr', 'invite-qr-code', 'share-qr'].map(id => [id, get(id)]));
 const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
 const cameraIcon = icon('<rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/>');
 get('camera-icon').innerHTML = cameraIcon;
@@ -43,6 +43,121 @@ let overlayTimer;
 let incomingCall;
 let contactState;
 let refreshingContacts = false;
+
+const deviceKeys = { audio: 'chatlingua-mic', video: 'chatlingua-camera', output: 'chatlingua-speaker' };
+const deviceSelects = { audio: ui['mic-device'], video: ui['camera-device'], output: ui['speaker-device'] };
+const webSinks = !android && 'setSinkId' in HTMLMediaElement.prototype;
+const savedDevice = kind => { try { return localStorage.getItem(deviceKeys[kind]) || ''; } catch { return ''; } };
+const saveDevice = (kind, id) => { try { localStorage.setItem(deviceKeys[kind], id); } catch {} };
+ui['speaker-device-label'].hidden = !android?.audioOutputs && !webSinks;
+
+function fillDevices(kind, items, label) {
+  const select = deviceSelects[kind];
+  select.replaceChildren(new Option(t('Default'), ''));
+  items.forEach((item, index) => select.add(new Option(item.name || t(label, { number: index + 1 }), item.id)));
+  const wanted = savedDevice(kind);
+  select.value = items.some(item => item.id === wanted) ? wanted : '';
+}
+
+async function refreshDevices() {
+  let devices = [];
+  try { devices = await navigator.mediaDevices.enumerateDevices(); } catch {}
+  const pick = type => devices.filter(item => item.kind === type && item.deviceId && !['default', 'communications'].includes(item.deviceId))
+    .map(item => ({ id: item.deviceId, name: item.label }));
+  fillDevices('audio', pick('audioinput'), 'Microphone {number}');
+  fillDevices('video', pick('videoinput'), 'Camera {number}');
+  if (android?.audioOutputs) {
+    let outputs = [];
+    try { outputs = JSON.parse(android.audioOutputs()); } catch {}
+    fillDevices('output', outputs.map(item => ({ id: item.id, name: t(item.name) + (item.product ? ' – ' + item.product : '') })), 'Speaker {number}');
+  } else if (webSinks) {
+    fillDevices('output', pick('audiooutput'), 'Speaker {number}');
+  }
+  updateMicHint();
+}
+
+function updateMicHint() {
+  ui['mic-hint'].hidden = !!android || !deviceSelects.audio.value || !!captionSession?.localSpeech;
+}
+
+function mediaConstraints(kind, exact) {
+  const id = savedDevice(kind);
+  const device = id ? { deviceId: exact ? { exact: id } : { ideal: id } } : {};
+  return kind === 'audio' ? { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...device } }
+    : { video: id ? device : true };
+}
+
+async function applyOutput(id) {
+  if (android?.setAudioOutput) android.setAudioOutput(id);
+  else if (webSinks) await ui.remote.setSinkId(id);
+}
+
+async function switchInput(kind) {
+  const select = deviceSelects[kind];
+  saveDevice(kind, select.value);
+  updateMicHint();
+  const session = call;
+  if (!session) return;
+  const old = session.stream.getTracks().find(item => item.kind === kind);
+  const previous = old?.getSettings().deviceId;
+  const open = async () => (await navigator.mediaDevices.getUserMedia(mediaConstraints(kind, true))).getTracks()[0];
+  let fresh;
+  try {
+    try { fresh = await open(); }
+    catch (error) {
+      // Some phones cannot open two cameras or microphones at once; release the old one and retry.
+      if (!old || !['NotReadableError', 'AbortError'].includes(error.name)) throw error;
+      old.stop();
+      try { fresh = await open(); }
+      catch (retry) {
+        const restore = (await navigator.mediaDevices.getUserMedia(kind === 'audio'
+          ? { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, deviceId: previous } }
+          : { video: { deviceId: previous } })).getTracks()[0];
+        await replaceTrack(session, kind, old, restore);
+        throw retry;
+      }
+    }
+    if (call !== session) return fresh.stop();
+    await replaceTrack(session, kind, old, fresh);
+  } catch {
+    if (call === session) status(t(kind === 'audio' ? 'Could not switch to that microphone.' : 'Could not switch to that camera.'), 'error');
+    const current = session.stream.getTracks().find(item => item.kind === kind)?.getSettings().deviceId;
+    const known = [...select.options].some(option => option.value === current);
+    saveDevice(kind, known ? current : '');
+  }
+  refreshDevices();
+}
+
+async function replaceTrack(session, kind, old, fresh) {
+  if (call !== session) return fresh.stop();
+  const enabled = old ? old.enabled : true;
+  fresh.enabled = enabled;
+  const sender = session.peer.getSenders().find(item => item.track?.kind === kind);
+  if (sender) await sender.replaceTrack(fresh);
+  if (old) session.stream.removeTrack(old);
+  session.stream.addTrack(fresh);
+  old?.stop();
+  if (kind === 'video') ui.local.srcObject = session.stream;
+  if (kind === 'audio' && captionSession?.recognition) {
+    // Android pipes the call stream through an AudioContext; desktop on-device recognition is started with the track itself.
+    captionSession.recognition.useStream?.(session.stream);
+    if (captionSession.localSpeech) captionSession.recognition.abort();
+  }
+}
+
+deviceSelects.audio.addEventListener('change', () => switchInput('audio'));
+deviceSelects.video.addEventListener('change', () => switchInput('video'));
+deviceSelects.output.addEventListener('change', async () => {
+  saveDevice('output', deviceSelects.output.value);
+  try { await applyOutput(deviceSelects.output.value); }
+  catch { status(t('Could not switch to that speaker.'), 'error'); }
+});
+if (android) {
+  globalThis.androidAudioDevicesChanged = refreshDevices;
+  deviceSelects.output.addEventListener('focus', refreshDevices);
+}
+navigator.mediaDevices?.addEventListener?.('devicechange', refreshDevices);
+refreshDevices();
 
 function status(message, state = 'idle') {
   ui.status.textContent = message;
@@ -655,6 +770,7 @@ function leave(message, state = 'idle') {
   request('/' + session.id + '/leave', { token: session.token, method: 'POST', keepalive: true }).catch(() => {});
   ui.local.srcObject = ui.remote.srcObject = null;
   ui.remote.muted = false;
+  android?.callEnded?.();
   ui.speaker.setAttribute('aria-pressed', 'true');
   ui.self.hidden = true;
   ui.history.replaceChildren();
@@ -686,7 +802,8 @@ async function start({ contact, incoming } = {}) {
   let stream;
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('Camera and microphone require HTTPS or localhost.'));
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    stream = await navigator.mediaDevices.getUserMedia({ ...mediaConstraints('video'), ...mediaConstraints('audio') });
+    refreshDevices();
     const info = incoming
       ? await contactsRequest('/accept', { room: incoming.room })
       : await request(!contact && inviteId ? '/' + encodeURIComponent(inviteId) + '/join' : '', { method: 'POST' });
@@ -713,6 +830,7 @@ async function start({ contact, incoming } = {}) {
       }
     };
     ui.local.srcObject = stream;
+    if (deviceSelects.output.value || webSinks) applyOutput(deviceSelects.output.value).catch(() => {});
     ui.self.hidden = false;
     ui.start.hidden = true;
     get('join-link').hidden = true;
@@ -752,6 +870,7 @@ function captionStatus(message) {
 function stopCaptions(message = t('Turn on captions during the call.')) {
   const current = captionSession;
   captionSession = undefined;
+  updateMicHint();
   if (current?.recognition?.destroy) current.recognition.destroy();
   else current?.recognition?.abort();
   for (const select of [ui.spoken, ui.source, ui.target]) select.disabled = false;
@@ -885,6 +1004,7 @@ async function toggleCaptions() {
       current.localSpeech = await prepareLocalSpeech(Recognition, current.spoken);
       if (captionSession !== current) return;
       if (current.localSpeech) recognition.processLocally = true;
+      updateMicHint();
       recognition.lang = current.spoken;
       recognition.continuous = true;
       recognition.interimResults = true;

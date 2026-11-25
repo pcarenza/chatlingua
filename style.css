@@ -127,3 +127,6 @@ select { display: block; width: 100%; margin-top: .35rem; background: #111c1e; c
 .contact-exchange p { flex: 1 1 12rem; }
 #accept-contact { background: var(--accent); border-color: transparent; color: #102822; }
 #accept-contact:hover:not(:disabled) { background: #b0f6e1; }
+
+.hint { margin: .35rem 0 0; font-size: .85rem; color: #9fb4b2; }
+.hint[hidden], .devices label[hidden] { display: none; }

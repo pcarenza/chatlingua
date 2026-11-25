@@ -55,7 +55,7 @@ globalThis.androidSpeechEnd = id => {
 
 export function androidRecognition(stream, locale, callbacks) {
   const context = new AudioContext({ sampleRate: 16000 });
-  const input = context.createMediaStreamSource(stream);
+  let input = context.createMediaStreamSource(stream);
   const processor = context.createScriptProcessor(1024, 1, 1);
   const session = { id: 0, ...callbacks };
   processor.onaudioprocess = event => {
@@ -72,6 +72,11 @@ export function androidRecognition(stream, locale, callbacks) {
   input.connect(processor);
   processor.connect(context.destination);
   return {
+    useStream(next) {
+      input.disconnect();
+      input = context.createMediaStreamSource(next);
+      input.connect(processor);
+    },
     start() {
       session.id = ++nextId;
       active = session;
