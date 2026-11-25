@@ -49,6 +49,14 @@ p { color: var(--muted); line-height: 1.5; }
 .scan-dialog h2 { margin: 0 0 .7rem; font-size: 1.1rem; }
 .stage .scan-dialog video { position: static; width: 100%; height: auto; aspect-ratio: 4/3; max-height: 40dvh; background: #000; border-radius: 10px; }
 .scan-dialog p { margin: .7rem 0; font-size: .9rem; overflow-wrap: anywhere; }
+.invite-code { margin: .2rem 0 .4rem; font-size: .85rem; }
+.invite-code span { display: block; opacity: .8; }
+.invite-code code { display: block; margin-top: .15rem; font: 700 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .12em; user-select: all; -webkit-user-select: all; }
+.scan-code { margin: .7rem 0; text-align: left; }
+.scan-code label { display: block; font-size: .85rem; opacity: .8; margin-bottom: .25rem; }
+.scan-code div { display: flex; gap: .5rem; }
+.scan-code input { flex: 1; min-width: 0; background: #111c1e; color: inherit; border: 1px solid #3c5052; border-radius: 8px; padding: .55rem .65rem; font: 700 1.1rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.scan-code input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .scan-actions { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
 .hero-icon { display: grid; place-items: center; width: 64px; height: 64px; margin: auto; border: 1px solid #51756d; border-radius: 21px; background: #304e47; color: var(--accent); }
 .hero-icon svg { width: 30px; height: 30px; }

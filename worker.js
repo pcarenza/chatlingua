@@ -2,6 +2,19 @@ import { assets } from './assets.js';
 
 const timeout = 90_000;
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.toString(16).padStart(2, '0')).join('');
+const codeAlphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const codeLifetime = 15 * 60_000;
+const failureWindow = 10 * 60_000;
+const failureLimit = 10;
+function inviteCode() {
+  let code = '';
+  while (code.length < 6) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(12))) {
+      if (byte < 248 && code.length < 6) code += codeAlphabet[byte % 31];
+    }
+  }
+  return code;
+}
 const member = now => ({ token: token(), seen: now, cursor: 0, messages: [] });
 const response = (data, status = 200) => Response.json(data, {
   status, headers: { 'Cache-Control': 'no-store' },
@@ -63,7 +76,34 @@ export async function handleRooms(request, env, store) {
       const host = member(now);
       const state = JSON.stringify({ host, guest: null });
       if (!await store.create(id, now, now + timeout, state)) return error('All rooms are in use. Try again shortly.', 503);
-      return response({ id, token: host.token, role: 'host', iceServers }, 201);
+      const created = { id, token: host.token, role: 'host', iceServers };
+      if (store.createCode) {
+        try {
+          for (let attempt = 0; attempt < 8; attempt++) {
+            const code = inviteCode();
+            if (await store.createCode(code, id, now, now + codeLifetime)) { created.code = code; break; }
+          }
+        } catch (cause) {
+          console.error('Invite code unavailable', cause.message);
+        }
+      }
+      return response(created, 201);
+    }
+    if (url.pathname === '/api/code') {
+      if (method !== 'POST') return error('Method unavailable.', 405);
+      if (!store.readCode) return error('Invite codes are unavailable.', 404);
+      const client = request.headers.get('CF-Connecting-IP') || 'unknown';
+      if (await store.failures(client, now - failureWindow) >= failureLimit) return error('Too many attempts. Try again later.', 429);
+      let body;
+      try { body = await readSignal(request); }
+      catch { return error('Invalid invite code.', 400); }
+      const code = String(body?.code ?? '').toUpperCase().replace(/[\s-]/g, '');
+      const found = new RegExp('^[' + codeAlphabet + ']{6}$').test(code) && await store.readCode(code, now);
+      const live = found && await store.read(found);
+      if (live && live.expires > now && !JSON.parse(live.state).guest) return response({ room: found });
+      if (found) await store.deleteCodes(found);
+      await store.addFailure(client, now, now - failureWindow);
+      return error('That code isn\'t valid or has expired.', 404);
     }
     const route = /^\/api\/rooms\/([a-f0-9]{36})\/(join|signals|leave)$/.exec(url.pathname);
     if (!route) return error('Page unavailable.', 404);
@@ -92,6 +132,7 @@ export async function handleRooms(request, env, store) {
         const peer = participant === room.host ? room.guest : room.host;
         if (action === 'leave' && method === 'POST') {
           await store.delete(id);
+          if (store.deleteCodes) await store.deleteCodes(id);
           return response({});
         }
         if (action === 'signals' && method === 'GET') {
@@ -112,7 +153,10 @@ export async function handleRooms(request, env, store) {
         participant.seen = now;
       }
       const expires = Math.min(room.host.seen, room.guest?.seen ?? room.host.seen) + timeout;
-      if (await store.update(id, row.revision, expires, JSON.stringify(room))) return response(data);
+      if (await store.update(id, row.revision, expires, JSON.stringify(room))) {
+        if (joining && store.deleteCodes) await store.deleteCodes(id);
+        return response(data);
+      }
     }
     return error('Room is busy. Try again shortly.', 503);
   } catch (cause) {

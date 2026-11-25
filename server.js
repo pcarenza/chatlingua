@@ -14,6 +14,21 @@ const files = new Map([
 const rooms = new Map();
 const timeout = 90_000;
 const token = () => randomBytes(18).toString('hex');
+const codes = new Map();
+const failures = new Map();
+const codeAlphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const codeLifetime = 15 * 60_000;
+const failureWindow = 10 * 60_000;
+function inviteCode() {
+  let code = '';
+  while (code.length < 6) {
+    for (const byte of randomBytes(12)) if (byte < 248 && code.length < 6) code += codeAlphabet[byte % 31];
+  }
+  return code;
+}
+function deleteCodes(room) {
+  for (const [code, entry] of codes) if (entry.room === room) codes.delete(code);
+}
 const member = () => ({ token: token(), seen: Date.now(), cursor: 0, messages: [] });
 
 function send(response, status, data) {
@@ -49,9 +64,33 @@ const server = createServer(async (request, response) => {
       const id = token();
       const host = member();
       rooms.set(id, { host, guest: null });
-      return send(response, 201, { id, token: host.token, role: 'host', iceServers });
+      const created = { id, token: host.token, role: 'host', iceServers };
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const code = inviteCode();
+        if (!codes.has(code)) {
+          codes.set(code, { room: id, expires: Date.now() + codeLifetime });
+          created.code = code;
+          break;
+        }
+      }
+      return send(response, 201, created);
     }
-
+    if (url.pathname === '/api/code') {
+      if (request.method !== 'POST') return send(response, 405, { error: 'Method unavailable.' });
+      const client = request.socket.remoteAddress || 'unknown';
+      const now = Date.now();
+      const recent = (failures.get(client) || []).filter(at => now - at < failureWindow);
+      failures.set(client, recent);
+      if (recent.length >= 10) return send(response, 429, { error: 'Too many attempts. Try again later.' });
+      const body = await json(request);
+      const code = String(body?.code ?? '').toUpperCase().replace(/[\s-]/g, '');
+      const entry = new RegExp('^[' + codeAlphabet + ']{6}$').test(code) && codes.get(code);
+      const room = entry && entry.expires > now && rooms.get(entry.room);
+      if (room && !room.guest) return send(response, 200, { room: entry.room });
+      if (entry) codes.delete(code);
+      recent.push(now);
+      return send(response, 404, { error: 'That code isn\'t valid or has expired.' });
+    }
     const route = /^\/api\/rooms\/([a-f0-9]{36})\/(join|signals|leave)$/.exec(url.pathname);
     if (!route) return send(response, 404, { error: 'Page unavailable.' });
     const [, id, action] = route;
@@ -61,6 +100,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'POST' && action === 'join') {
       if (room.guest) return send(response, 409, { error: 'This room already has two participants.' });
       room.guest = member();
+      deleteCodes(id);
       return send(response, 200, { id, token: room.guest.token, role: 'guest', iceServers });
     }
 
@@ -72,6 +112,7 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST' && action === 'leave') {
       rooms.delete(id);
+      deleteCodes(id);
       return send(response, 200, {});
     }
     if (request.method === 'GET' && action === 'signals') {
@@ -99,8 +140,11 @@ const server = createServer(async (request, response) => {
 
 setInterval(() => {
   for (const [id, room] of rooms) {
-    if ([room.host, room.guest].some(person => person && Date.now() - person.seen > timeout)) rooms.delete(id);
+    if ([room.host, room.guest].some(person => person && Date.now() - person.seen > timeout)) { rooms.delete(id); deleteCodes(id); }
   }
+  const now = Date.now();
+  for (const [code, entry] of codes) if (entry.expires <= now) codes.delete(code);
+  for (const [client, times] of failures) if (!times.some(at => now - at < failureWindow)) failures.delete(client);
 }, 10_000).unref();
 
 const port = Number(process.env.PORT || 3000);

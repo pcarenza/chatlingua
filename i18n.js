@@ -131,6 +131,13 @@ Scan to join|Escanea para unirte|Scannez pour rejoindre|Escaneie para entrar
 Share QR code|Compartir código QR|Partager le code QR|Compartilhar QR code
 Scan invite QR code|Escanear código QR de invitación|Scanner le code QR d’invitation|Escanear QR code do convite
 Point the camera at the invite QR code.|Apunta la cámara al código QR de la invitación.|Pointez la caméra vers le code QR d’invitation.|Aponte a câmera para o QR code do convite.
+Or enter code|O introduce el código|Ou saisissez le code|Ou digite o código
+Invite code|Código de invitación|Code d’invitation|Código de convite
+Join|Unirse|Rejoindre|Entrar
+That code isn't valid or has expired.|Ese código no es válido o ha caducado.|Ce code n’est pas valide ou a expiré.|Esse código não é válido ou expirou.
+Too many attempts. Try again later.|Demasiados intentos. Inténtalo de nuevo más tarde.|Trop de tentatives. Réessayez plus tard.|Muitas tentativas. Tente novamente mais tarde.
+Could not check the code. Try again.|No se pudo comprobar el código. Inténtalo de nuevo.|Impossible de vérifier le code. Réessayez.|Não foi possível verificar o código. Tente novamente.
+Camera unavailable. Enter an invite code or paste the link instead.|Cámara no disponible. Introduce un código de invitación o pega el enlace.|Caméra indisponible. Saisissez un code d’invitation ou collez le lien.|Câmera indisponível. Digite um código de convite ou cole o link.
 Paste link instead|Pegar enlace en su lugar|Coller le lien à la place|Colar link em vez disso
 Cancel|Cancelar|Annuler|Cancelar
 Camera unavailable. Paste the invite link instead.|Cámara no disponible. Pega el enlace de invitación.|Caméra indisponible. Collez plutôt le lien d’invitation.|Câmera indisponível. Cole o link de convite.

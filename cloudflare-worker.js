@@ -8,7 +8,30 @@ export class RoomService extends DurableObject {
     const sql = ctx.storage.sql;
     sql.exec('CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL, state TEXT NOT NULL)');
     sql.exec('CREATE INDEX IF NOT EXISTS rooms_expires ON rooms(expires)');
+    sql.exec('CREATE TABLE IF NOT EXISTS codes (code TEXT PRIMARY KEY, room TEXT NOT NULL, expires INTEGER NOT NULL)');
+    sql.exec('CREATE INDEX IF NOT EXISTS codes_room ON codes(room)');
+    sql.exec('CREATE TABLE IF NOT EXISTS code_failures (client TEXT NOT NULL, at INTEGER NOT NULL)');
+    sql.exec('CREATE INDEX IF NOT EXISTS code_failures_client ON code_failures(client, at)');
     this.rooms = {
+      createCode(code, room, now, expires) {
+        return ctx.storage.transactionSync(() => {
+          sql.exec('DELETE FROM codes WHERE expires <= ? OR room NOT IN (SELECT id FROM rooms)', now);
+          return sql.exec('INSERT OR IGNORE INTO codes (code, room, expires) VALUES (?, ?, ?)', code, room, expires).rowsWritten > 0;
+        });
+      },
+      readCode(code, now) {
+        return sql.exec('SELECT room FROM codes WHERE code = ? AND expires > ?', code, now).toArray()[0]?.room;
+      },
+      deleteCodes(room) {
+        sql.exec('DELETE FROM codes WHERE room = ?', room);
+      },
+      failures(client, since) {
+        return sql.exec('SELECT count(*) AS n FROM code_failures WHERE client = ? AND at > ?', client, since).one().n;
+      },
+      addFailure(client, now, since) {
+        sql.exec('DELETE FROM code_failures WHERE at <= ?', since);
+        sql.exec('INSERT INTO code_failures (client, at) VALUES (?, ?)', client, now);
+      },
       create(id, now, expires, state) {
         return ctx.storage.transactionSync(() => {
           sql.exec('DELETE FROM rooms WHERE expires <= ?', now);

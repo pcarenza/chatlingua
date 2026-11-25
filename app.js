@@ -214,6 +214,9 @@ function showInviteQr(show) {
   for (let row = 0; row < count; row++) for (let col = 0; col < count; col++) if (dark(row, col)) path += 'M' + (col + quiet) + ' ' + (row + quiet) + 'h1v1h-1z';
   ui['invite-qr-code'].innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" shape-rendering="crispEdges" role="img" aria-label="' + t('Scan to join') + '"><rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
   ui['share-qr'].hidden = !android?.shareImage && !canShareFiles();
+  const code = typeof call?.code === 'string' && /^[A-Z0-9]{6}$/.test(call.code) ? call.code : '';
+  get('invite-code').hidden = !code;
+  get('invite-code-value').textContent = code && code.slice(0, 3) + '-' + code.slice(3);
 }
 
 function qrCanvas(text) {
@@ -1008,6 +1011,25 @@ async function scanInvite() {
     if (dialog.open) dialog.close();
     action?.();
   };
+  const form = get('scan-code-form'), input = get('scan-code'), submit = get('scan-code-submit');
+  input.value = '';
+  submit.disabled = false;
+  video.hidden = false;
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const code = input.value.toUpperCase().replace(/[\s-]/g, '');
+    if (!code || submit.disabled) return;
+    submit.disabled = true;
+    try {
+      const { room } = await apiRequest('/api/code', { method: 'POST', body: { code } });
+      if (!/^[a-f0-9]{36}$/.test(room)) throw new Error('room');
+      finish(() => location.assign('/?room=' + room));
+    } catch (error) {
+      note.textContent = error.status === 429 ? t('Too many attempts. Try again later.')
+        : error.status === 404 ? t('That code isn\'t valid or has expired.') : t('Could not check the code. Try again.');
+      submit.disabled = false;
+    }
+  };
   get('scan-cancel').onclick = () => finish();
   get('scan-paste').onclick = () => finish(pasteInvite);
   dialog.oncancel = () => finish();
@@ -1021,7 +1043,11 @@ async function scanInvite() {
     video.srcObject = stream;
     await video.play().catch(() => {});
   } catch {
-    if (!done) finish(() => { status(t('Camera unavailable. Paste the invite link instead.'), 'error'); pasteInvite(); });
+    if (!done) {
+      video.hidden = true;
+      note.textContent = t('Camera unavailable. Enter an invite code or paste the link instead.');
+      input.focus();
+    }
     return;
   }
   timer = setInterval(async () => {
@@ -1047,10 +1073,7 @@ async function scanInvite() {
   }, 150);
 }
 
-get('join-link').addEventListener('click', () => {
-  if (navigator.mediaDevices?.getUserMedia) scanInvite();
-  else pasteInvite();
-});
+get('join-link').addEventListener('click', scanInvite);
 window.addEventListener('pagehide', () => leave(t('You left the call')));
 lobby();
 setupContacts();

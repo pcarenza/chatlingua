@@ -36,7 +36,7 @@
             <div id="camera-icon" class="hero-icon" aria-hidden="true"></div>
             <h2 id="stage-title">Start a conversation</h2>
             <p id="stage-description">Create a room and share the invite link with one person.</p>
-            <figure id="invite-qr" class="invite-qr" hidden><div id="invite-qr-code"></div><figcaption>Scan to join</figcaption><button id="share-qr" type="button" hidden>Share QR code</button></figure>
+            <figure id="invite-qr" class="invite-qr" hidden><div id="invite-qr-code"></div><figcaption>Scan to join</figcaption><p id="invite-code" class="invite-code" hidden><span>Or enter code</span><code id="invite-code-value"></code></p><button id="share-qr" type="button" hidden>Share QR code</button></figure>
             <button id="start" class="primary">Create room</button>
             <button id="join-link">Join with invite</button>
           </div>
@@ -44,6 +44,10 @@
             <h2 id="scan-title">Scan invite QR code</h2>
             <video id="scan-video" autoplay playsinline muted></video>
             <p id="scan-status" role="status">Point the camera at the invite QR code.</p>
+            <form id="scan-code-form" class="scan-code" autocomplete="off">
+              <label for="scan-code">Invite code</label>
+              <div><input id="scan-code" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="8" placeholder="XXX-XXX"><button id="scan-code-submit" type="submit">Join</button></div>
+            </form>
             <div class="scan-actions"><button id="scan-paste" type="button">Paste link instead</button><button id="scan-cancel" type="button">Cancel</button></div>
           </dialog>
           <div id="self" class="self" hidden><video id="local" autoplay playsinline muted></video><span>You</span></div>
