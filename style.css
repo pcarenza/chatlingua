@@ -53,7 +53,7 @@ p { color: var(--muted); line-height: 1.5; }
 .icon { display: grid; place-items: center; }
 svg { width: 21px; height: 21px; }
 .controls #captions[aria-pressed="true"] { color: var(--accent); background: #294943; border-color: #629489; }
-.controls #mic[aria-pressed="false"], .controls #camera[aria-pressed="false"] { color: #ffb0af; }
+.controls #mic[aria-pressed="false"], .controls #camera[aria-pressed="false"], .controls #speaker[aria-pressed="false"] { color: #ffb0af; }
 .controls .end { color: #ffcbc8; background: #4d2c2e; border-color: #74464a; }
 .sidebar section { padding: 1.15rem; }
 .sidebar h2 { font-size: 1.1rem; margin-bottom: .9rem; }

@@ -19,6 +19,7 @@ You|Tú|Vous|Você
 Call controls|Controles de llamada|Commandes d’appel|Controles da chamada
 Mic|Micrófono|Micro|Microfone
 Camera|Cámara|Caméra|Câmera
+Speaker|Altavoz|Haut-parleur|Alto-falante
 Captions|Subtítulos|Sous-titres|Legendas
 Chat|Chat|Discussion|Chat
 Chat ({count})|Chat ({count})|Discussion ({count})|Chat ({count})

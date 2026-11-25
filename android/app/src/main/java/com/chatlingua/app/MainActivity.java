@@ -11,6 +11,7 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.util.Base64;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -54,6 +55,8 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         web = new WebView(this);
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(false);
@@ -256,11 +259,22 @@ public final class MainActivity extends Activity {
         }
     }
 
+    @Override protected void onPause() {
+        super.onPause();
+        CookieManager.getInstance().flush();
+    }
+
+    @Override protected void onStop() {
+        super.onStop();
+        CookieManager.getInstance().flush();
+    }
+
     @Override protected void onDestroy() {
         speechId = 0;
         stopSpeech();
         audioQueue.shutdownNow();
         if (translator != null) translator.close();
+        CookieManager.getInstance().flush();
         web.destroy();
         super.onDestroy();
     }

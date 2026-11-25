@@ -7,13 +7,14 @@ const android = globalThis.ChatLinguaAndroid;
 const get = id => document.getElementById(id);
 if (android) get('android-download')?.remove();
 const ui = Object.fromEntries(['invite', 'status', 'remote', 'placeholder', 'stage-title', 'stage-description',
-  'start', 'self', 'local', 'overlay', 'mic', 'camera', 'captions', 'end', 'spoken', 'source',
+  'start', 'self', 'local', 'overlay', 'mic', 'camera', 'speaker', 'captions', 'end', 'spoken', 'source',
   'target', 'caption-status', 'history', 'chat-toggle', 'chat-label', 'chat-panel', 'chat-status',
   'chat-messages', 'chat-form', 'chat-input', 'chat-send'].map(id => [id, get(id)]));
 const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
 const cameraIcon = icon('<rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/>');
 get('camera-icon').innerHTML = cameraIcon;
 ui.camera.querySelector('.icon').innerHTML = cameraIcon;
+ui.speaker.querySelector('.icon').innerHTML = icon('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>');
 ui.mic.querySelector('.icon').innerHTML = icon('<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3m-3 0h6"/>');
 ui.captions.querySelector('.icon').innerHTML = icon('<rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9H8a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2m8-6h-2a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2"/>');
 ui['chat-toggle'].querySelector('.icon').innerHTML = icon('<path d="M21 11a8 8 0 0 1-8 8H9l-5 3v-5a8 8 0 0 1-2-6 8 8 0 0 1 8-8h3a8 8 0 0 1 8 8Z"/><path d="M7 9h9m-9 4h6"/>');
@@ -201,7 +202,7 @@ function lobby() {
 }
 
 function activateControls(active) {
-  for (const button of [ui.mic, ui.camera, ui.captions, ui['chat-toggle'], ui.end]) button.disabled = !active;
+  for (const button of [ui.mic, ui.camera, ui.speaker, ui.captions, ui['chat-toggle'], ui.end]) button.disabled = !active;
   ui.invite.hidden = !active || call?.role !== 'host' || Boolean(call.contact);
   ui.invite.textContent = android ? t('Share invite link') : t('Copy invite link');
   const add = get('add-call-contact');
@@ -595,6 +596,8 @@ function leave(message, state = 'idle') {
   session.stream.getTracks().forEach(track => track.stop());
   request('/' + session.id + '/leave', { token: session.token, method: 'POST', keepalive: true }).catch(() => {});
   ui.local.srcObject = ui.remote.srcObject = null;
+  ui.remote.muted = false;
+  ui.speaker.setAttribute('aria-pressed', 'true');
   ui.self.hidden = true;
   ui.history.replaceChildren();
   ui['chat-messages'].replaceChildren();
@@ -625,7 +628,7 @@ async function start({ contact, incoming } = {}) {
   let stream;
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('Camera and microphone require HTTPS or localhost.'));
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     const info = incoming
       ? await contactsRequest('/accept', { room: incoming.room })
       : await request(!contact && inviteId ? '/' + encodeURIComponent(inviteId) + '/join' : '', { method: 'POST' });
@@ -657,6 +660,8 @@ async function start({ contact, incoming } = {}) {
     get('join-link').hidden = true;
     ui.mic.setAttribute('aria-pressed', 'true');
     ui.camera.setAttribute('aria-pressed', 'true');
+    ui.remote.muted = false;
+    ui.speaker.setAttribute('aria-pressed', 'true');
     activateControls(true);
     ui['stage-title'].textContent = contact ? t('Calling {name}', { name: contact.label }) : info.role === 'host' ? t('Waiting for someone to join') : t('Connecting…');
     ui['stage-description'].textContent = contact ? t('Waiting for your contact to accept.') : info.role === 'host' ? t('Copy the invite link and send it to your call partner.') : t('Establishing the video call.');
@@ -905,6 +910,10 @@ for (const [button, kind] of [[ui.mic, 'audio'], [ui.camera, 'video']]) {
     }
   });
 }
+ui.speaker.addEventListener('click', () => {
+  ui.remote.muted = !ui.remote.muted;
+  ui.speaker.setAttribute('aria-pressed', String(!ui.remote.muted));
+});
 get('join-link').addEventListener('click', () => {
   const link = window.prompt(t('Paste your ChatLingua invite link'));
   if (!link) return;
