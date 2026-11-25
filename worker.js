@@ -127,7 +127,13 @@ export default {
     const method = request.method;
     const asset = Object.hasOwn(assets, url.pathname) && assets[url.pathname];
     if (method === 'GET' && asset) {
-      return new Response(asset.body, { headers: {
+      const body = url.pathname === '/' && env.ROOMS
+        ? asset.body
+          .replace('<html lang="en">', '<html lang="en" data-region="' + (/^[A-Z]{2}$/.test(request.cf?.country) ? request.cf.country : '') + '">')
+          .replace('<!-- android-download -->', '<a class="android-download" id="android-download" href="https://chatlingua-download.pcarenza.workers.dev/ChatLingua-Cloudflare.apk">Download Android app</a>')
+          .replace('class="contacts" aria-labelledby="contacts-title" hidden', 'class="contacts" aria-labelledby="contacts-title"')
+        : asset.body;
+      return new Response(body, { headers: {
         'Content-Type': asset.type + '; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'; base-uri 'none'",

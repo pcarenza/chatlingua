@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <queries><intent><action android:name="android.speech.RecognitionService"/></intent></queries>
-    <application android:label="${chatlinguaLabel}" android:allowBackup="false" android:usesCleartextTraffic="false"
+    <application android:label="${chatlinguaLabel}" android:icon="${chatlinguaIcon}" android:allowBackup="false" android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

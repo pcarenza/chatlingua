@@ -11,13 +11,22 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-icon" aria-hidden="true">文<span>A</span></span> Chat<span>Lingua</span></div>
-    <button id="invite" hidden>Copy invite link</button>
+    <div class="topbar-actions">
+      <select id="interface-language" aria-label="Interface language"></select>
+      <!-- android-download -->
+      <button id="invite" hidden>Copy invite link</button>
+    </div>
   </header>
   <main>
     <div class="intro">
       <div><h1>Video call</h1><p id="description">Talk in your language. Read captions in yours.</p></div>
       <span id="status" role="status" class="status" data-state="idle">Ready to start</span>
     </div>
+    <section id="incoming-call" class="incoming-call" aria-label="Incoming call" hidden>
+      <p id="incoming-label" role="status"></p>
+      <button id="accept-call" type="button">Accept</button>
+      <button id="decline-call" type="button">Decline</button>
+    </section>
     <div class="layout">
       <section class="call" aria-label="Video call">
         <div class="stage">
@@ -37,7 +46,13 @@
           <button id="camera" disabled aria-pressed="true"><span class="icon"></span><span>Camera</span></button>
           <button id="captions" disabled aria-pressed="false"><span class="icon"></span><span>Captions</span></button>
           <button id="chat-toggle" disabled aria-expanded="false" aria-controls="chat-panel"><span class="icon"></span><span id="chat-label">Chat</span></button>
+          <button id="add-call-contact" type="button" hidden disabled><span class="icon"></span><span>Add contact</span></button>
           <button id="end" class="end" disabled><span class="icon"></span><span>Leave</span></button>
+        </div>
+        <div id="contact-exchange" class="contact-exchange" hidden>
+          <p id="contact-exchange-status" role="status"></p>
+          <button id="accept-contact" type="button" hidden>Accept contact</button>
+          <button id="decline-contact" type="button" hidden>Decline</button>
         </div>
         <section id="chat-panel" class="chat" aria-labelledby="chat-title" hidden>
           <h2 id="chat-title">Room chat</h2>
@@ -51,6 +66,24 @@
         </section>
       </section>
       <aside class="sidebar" aria-label="Caption settings and history">
+        <section id="contacts" class="contacts" aria-labelledby="contacts-title" hidden>
+          <h2 id="contacts-title">Contacts</h2>
+          <button id="setup-contacts" type="button">Get my contact code</button>
+          <div id="contact-details" hidden>
+            <label for="my-code">Your contact code</label>
+            <div class="contact-fields">
+              <input id="my-code" readonly>
+              <button id="copy-code" type="button">Copy</button>
+            </div>
+            <form id="contact-form">
+              <label>Contact name <input id="contact-name" maxlength="60" required></label>
+              <label>Contact code <input id="contact-code" maxlength="12" minlength="12" autocapitalize="off" spellcheck="false" required></label>
+              <button type="submit">Save contact</button>
+            </form>
+            <ul id="contact-list" aria-label="Saved contacts"></ul>
+          </div>
+          <p id="contact-status" role="status"></p>
+        </section>
         <section class="settings">
           <h2>Caption languages</h2>
           <label>I speak <select id="spoken"></select></label>

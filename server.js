@@ -6,6 +6,7 @@ const files = new Map([
   ['/', ['index.html', 'text/html']],
   ['/style.css', ['style.css', 'text/css']],
   ['/app.js', ['app.js', 'text/javascript']],
+  ['/i18n.js', ['i18n.js', 'text/javascript']],
   ['/android-bridge.js', ['android-bridge.js', 'text/javascript']],
 ]);
 const rooms = new Map();

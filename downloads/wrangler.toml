@@ -1,0 +1,7 @@
+name = "chatlingua-download"
+compatibility_date = "2026-11-23"
+account_id = "d1196e0aa20018c3bd23d655f464519c"
+workers_dev = true
+
+[assets]
+directory = "../outputs/apk-public"

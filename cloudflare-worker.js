@@ -1,3 +1,4 @@
+import { ContactService } from './contacts.js';
 import { DurableObject } from 'cloudflare:workers';
 import worker, { handleRooms } from './dist/server/index.js';
 
@@ -26,9 +27,12 @@ export class RoomService extends DurableObject {
           expires, state, id, revision).rowsWritten > 0;
       },
     };
+    this.contacts = new ContactService(sql, this.rooms, request => handleRooms(request, this.env, this.rooms));
   }
 
   fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === '/api/contacts' || path.startsWith('/api/contacts/')) return this.contacts.fetch(request);
     return handleRooms(request, this.env, this.rooms);
   }
 }

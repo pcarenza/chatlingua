@@ -1,5 +1,5 @@
 plugins { id 'com.android.application' version '8.5.2' }
-def cloudflareBuild = providers.gradleProperty('chatlinguaCloudflare').orElse('false').get().toBoolean()
+def cloudflareBuild = providers.gradleProperty('chatlinguaCloudflare').orElse('true').get().toBoolean()
 def chatlinguaHost = cloudflareBuild
     ? 'chatlingua.pcarenza.workers.dev'
     : 'chatlingua-video-calls.goldencurl1.chatgpt.site'
@@ -18,11 +18,15 @@ android {
         manifestPlaceholders = [
             chatlinguaHost: chatlinguaHost,
             chatlinguaLabel: cloudflareBuild ? 'ChatLingua Cloudflare' : 'ChatLingua',
+            chatlinguaIcon: cloudflareBuild ? '@mipmap/ic_chatlingua_cloudflare' : '@android:drawable/sym_def_app_icon',
         ]
+        if (providers.gradleProperty('chatlinguaArm64').orElse('false').get().toBoolean()) {
+            ndk { abiFilters 'arm64-v8a' }
+        }
         minSdk 33
         targetSdk 34
-        versionCode 3
-        versionName '0.1.2'
+        versionCode cloudflareBuild ? 4 : 3
+        versionName cloudflareBuild ? '0.1.3' : '0.1.2'
     }
 }
 dependencies { implementation 'com.google.mlkit:translate:17.0.3' }
