@@ -12,5 +12,5 @@ const assets = Object.fromEntries(await Promise.all(files.map(async ([path, name
   path, { type, body: await readFile(name, 'utf8') },
 ])));
 await mkdir('dist/server', { recursive: true });
-const worker = (await readFile('worker.js', 'utf8')).replace("import { assets } from './assets.js';", 'const assets = ' + JSON.stringify(assets) + ';');
+const worker = (await readFile('worker.js', 'utf8')).replace("import { assets } from './assets.js';", () => 'const assets = ' + JSON.stringify(assets) + ';');
 await writeFile('dist/server/index.js', worker);
