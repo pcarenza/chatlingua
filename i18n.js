@@ -127,6 +127,14 @@ Translation is unavailable. Incoming captions will show the original language.|L
 You left the call|Saliste de la llamada|Vous avez quitté l’appel|Você saiu da chamada
 Invite copied|Invitación copiada|Invitation copiée|Convite copiado
 Copy this invite link|Copia este enlace de invitación|Copiez ce lien d’invitation|Copie este link de convite
+Scan to join|Escanea para unirte|Scannez pour rejoindre|Escaneie para entrar
+Share QR code|Compartir código QR|Partager le code QR|Compartilhar QR code
+Scan invite QR code|Escanear código QR de invitación|Scanner le code QR d’invitation|Escanear QR code do convite
+Point the camera at the invite QR code.|Apunta la cámara al código QR de la invitación.|Pointez la caméra vers le code QR d’invitation.|Aponte a câmera para o QR code do convite.
+Paste link instead|Pegar enlace en su lugar|Coller le lien à la place|Colar link em vez disso
+Cancel|Cancelar|Annuler|Cancelar
+Camera unavailable. Paste the invite link instead.|Cámara no disponible. Pega el enlace de invitación.|Caméra indisponible. Collez plutôt le lien d’invitation.|Câmera indisponível. Cole o link de convite.
+That QR code is not a ChatLingua invite for this site.|Ese código QR no es una invitación de ChatLingua para este sitio.|Ce code QR n’est pas une invitation ChatLingua pour ce site.|Esse QR code não é um convite do ChatLingua para este site.
 Paste your ChatLingua invite link|Pega el enlace de invitación de ChatLingua|Collez le lien d’invitation ChatLingua|Cole o link de convite do ChatLingua
 Enter an invite link for this ChatLingua site.|Introduce un enlace de invitación para este sitio de ChatLingua.|Saisissez un lien d’invitation pour ce site ChatLingua.|Digite um link de convite para este site do ChatLingua.
 Set up your contact code first.|Primero, configura tu código de contacto.|Configurez d’abord votre code de contact.|Configure seu código de contato primeiro.

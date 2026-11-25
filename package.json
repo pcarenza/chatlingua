@@ -8,5 +8,9 @@
     "build:worker": "node build-site.js",
     "dev:cloudflare": "npx --yes wrangler@4.167.0 dev",
     "deploy:cloudflare": "npx --yes wrangler@4.167.0 deploy"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "qrcode-generator": "^2.0.4"
   }
 }

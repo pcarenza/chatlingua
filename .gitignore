@@ -6,3 +6,4 @@ android/local.properties
 .openai/*.tar.gz
 outputs/
 .wrangler/
+node_modules/

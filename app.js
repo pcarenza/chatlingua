@@ -9,7 +9,7 @@ if (android) get('android-download')?.remove();
 const ui = Object.fromEntries(['invite', 'status', 'remote', 'placeholder', 'stage-title', 'stage-description',
   'start', 'self', 'local', 'overlay', 'mic', 'camera', 'speaker', 'captions', 'end', 'spoken', 'source',
   'target', 'caption-status', 'history', 'chat-toggle', 'chat-label', 'chat-panel', 'chat-status',
-  'chat-messages', 'chat-form', 'chat-input', 'chat-send'].map(id => [id, get(id)]));
+  'chat-messages', 'chat-form', 'chat-input', 'chat-send', 'invite-qr', 'invite-qr-code', 'share-qr'].map(id => [id, get(id)]));
 const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
 const cameraIcon = icon('<rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/>');
 get('camera-icon').innerHTML = cameraIcon;
@@ -192,7 +192,60 @@ function setupContacts() {
   });
 }
 
+function inviteUrl() {
+  const url = new URL('/', location.origin);
+  url.searchParams.set('room', call.id);
+  return url;
+}
+
+function qrModules(text) {
+  const qr = globalThis.qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  return { count: qr.getModuleCount(), dark: (row, col) => qr.isDark(row, col) };
+}
+
+function showInviteQr(show) {
+  ui['invite-qr-code'].replaceChildren();
+  ui['invite-qr'].hidden = !show || !globalThis.qrcode;
+  if (ui['invite-qr'].hidden) return;
+  const quiet = 4, { count, dark } = qrModules(inviteUrl().href), size = count + quiet * 2;
+  let path = '';
+  for (let row = 0; row < count; row++) for (let col = 0; col < count; col++) if (dark(row, col)) path += 'M' + (col + quiet) + ' ' + (row + quiet) + 'h1v1h-1z';
+  ui['invite-qr-code'].innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" shape-rendering="crispEdges" role="img" aria-label="' + t('Scan to join') + '"><rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
+  ui['share-qr'].hidden = !android?.shareImage && !canShareFiles();
+}
+
+function qrCanvas(text) {
+  const quiet = 4, scale = 10, { count, dark } = qrModules(text), size = (count + quiet * 2) * scale;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, size, size);
+  context.fillStyle = '#000';
+  for (let row = 0; row < count; row++) for (let col = 0; col < count; col++) if (dark(row, col)) context.fillRect((col + quiet) * scale, (row + quiet) * scale, scale, scale);
+  return canvas;
+}
+
+function canShareFiles() {
+  try {
+    return Boolean(navigator.canShare?.({ files: [new File([''], 'chatlingua-invite.png', { type: 'image/png' })] }));
+  } catch {
+    return false;
+  }
+}
+
+async function shareQr() {
+  const url = inviteUrl().href, canvas = qrCanvas(url);
+  if (android?.shareImage) return android.shareImage(canvas.toDataURL('image/png').split(',')[1], url);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  const files = [new File([blob], 'chatlingua-invite.png', { type: 'image/png' })];
+  await navigator.share({ files, text: url }).catch(() => {});
+}
+
 function lobby() {
+  showInviteQr(false);
   ui.placeholder.hidden = false;
   ui['stage-title'].textContent = inviteId ? t('You’re invited') : t('Start a conversation');
   ui['stage-description'].textContent = inviteId ? t('Allow camera and microphone access to join the call.') : t('Create a room and share the invite link with one person.');
@@ -205,6 +258,7 @@ function activateControls(active) {
   for (const button of [ui.mic, ui.camera, ui.speaker, ui.captions, ui['chat-toggle'], ui.end]) button.disabled = !active;
   ui.invite.hidden = !active || call?.role !== 'host' || Boolean(call.contact);
   ui.invite.textContent = android ? t('Share invite link') : t('Copy invite link');
+  showInviteQr(!ui.invite.hidden && !call.paired);
   const add = get('add-call-contact');
   add.hidden = !active || get('contacts').hidden || Boolean(call?.contact || call?.incoming);
   add.disabled = !active || call?.channel?.readyState !== 'open';
@@ -556,6 +610,7 @@ async function poll(session) {
     }
     if (result.paired && !session.paired) {
       session.paired = true;
+      showInviteQr(false);
       status(t('Connecting'));
       ui['stage-title'].textContent = t('Connecting…');
       ui['stage-description'].textContent = t('Establishing the video call.');
@@ -886,9 +941,9 @@ ui.captions.addEventListener('click', toggleCaptions);
 ui.spoken.addEventListener('change', () => {
   if (call) sendCaption(call, { type: 'language', locale: ui.spoken.value });
 });
+ui['share-qr'].addEventListener('click', shareQr);
 ui.invite.addEventListener('click', async () => {
-  const url = new URL('/', location.origin);
-  url.searchParams.set('room', call.id);
+  const url = inviteUrl();
   if (android) return android.share(url.href);
   try {
     await navigator.clipboard.writeText(url.href);
@@ -914,16 +969,87 @@ ui.speaker.addEventListener('click', () => {
   ui.remote.muted = !ui.remote.muted;
   ui.speaker.setAttribute('aria-pressed', String(!ui.remote.muted));
 });
-get('join-link').addEventListener('click', () => {
-  const link = window.prompt(t('Paste your ChatLingua invite link'));
-  if (!link) return;
+function inviteTarget(link) {
   try {
     const url = new URL(link);
-    if (url.origin !== location.origin || url.pathname !== '/' || !/^[a-f0-9]{36}$/.test(url.searchParams.get('room'))) throw new Error();
-    location.assign(url.href);
+    return url.origin === location.origin && url.pathname === '/' && /^[a-f0-9]{36}$/.test(url.searchParams.get('room')) ? url.href : null;
   } catch {
-    status(t('Enter an invite link for this ChatLingua site.'), 'error');
+    return null;
   }
+}
+
+function pasteInvite() {
+  const link = window.prompt(t('Paste your ChatLingua invite link'));
+  if (!link) return;
+  const href = inviteTarget(link);
+  if (href) location.assign(href);
+  else status(t('Enter an invite link for this ChatLingua site.'), 'error');
+}
+
+let jsQrLoad;
+const loadJsQr = () => globalThis.jsQR ? Promise.resolve() : jsQrLoad ||= new Promise((resolve, reject) => {
+  const script = document.createElement('script');
+  script.src = '/vendor/jsQR.js';
+  script.onload = resolve;
+  script.onerror = () => { jsQrLoad = null; reject(new Error('jsQR')); };
+  document.head.append(script);
+});
+
+async function scanInvite() {
+  const dialog = get('scan-dialog'), video = get('scan-video'), note = get('scan-status');
+  const canvas = document.createElement('canvas'), context = canvas.getContext('2d', { willReadFrequently: true });
+  const detector = globalThis.BarcodeDetector ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
+  let stream, timer, done = false, busy = false;
+  const finish = action => {
+    done = true;
+    clearInterval(timer);
+    stream?.getTracks().forEach(track => track.stop());
+    video.srcObject = null;
+    if (dialog.open) dialog.close();
+    action?.();
+  };
+  get('scan-cancel').onclick = () => finish();
+  get('scan-paste').onclick = () => finish(pasteInvite);
+  dialog.oncancel = () => finish();
+  note.textContent = t('Point the camera at the invite QR code.');
+  dialog.showModal();
+  try {
+    await loadJsQr();
+    const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    if (done) return media.getTracks().forEach(track => track.stop());
+    stream = media;
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+  } catch {
+    if (!done) finish(() => { status(t('Camera unavailable. Paste the invite link instead.'), 'error'); pasteInvite(); });
+    return;
+  }
+  timer = setInterval(async () => {
+    if (done || busy || !video.videoWidth) return;
+    busy = true;
+    try {
+      const scale = Math.min(1, 640 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      let text = detector ? (await detector.detect(canvas).catch(() => []))[0]?.rawValue || '' : '';
+      if (!text) {
+        const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+        text = globalThis.jsQR(frame.data, frame.width, frame.height, { inversionAttempts: 'dontInvert' })?.data || '';
+      }
+      if (done || !text) return;
+      const href = inviteTarget(text);
+      if (href) finish(() => location.assign(href));
+      else note.textContent = t('That QR code is not a ChatLingua invite for this site.');
+    } finally {
+      busy = false;
+    }
+  }, 150);
+}
+
+get('join-link').addEventListener('click', () => {
+  if (navigator.mediaDevices?.getUserMedia) scanInvite();
+  else pasteInvite();
 });
 window.addEventListener('pagehide', () => leave(t('You left the call')));
 lobby();

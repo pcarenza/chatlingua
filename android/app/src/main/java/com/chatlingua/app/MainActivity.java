@@ -23,6 +23,9 @@ import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.TranslatorOptions;
 import org.json.JSONObject;
+import androidx.core.content.FileProvider;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -256,6 +259,19 @@ public final class MainActivity extends Activity {
             if (!trusted(Uri.parse(url))) return;
             runOnUiThread(() -> startActivity(Intent.createChooser(
                 new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url), "Invite to ChatLingua")));
+        }
+        @JavascriptInterface public void shareImage(String base64Png, String url) {
+            if (!trusted(Uri.parse(url)) || base64Png == null || base64Png.length() > 2_000_000) return;
+            try {
+                File dir = new File(getCacheDir(), "shared");
+                if (!dir.isDirectory() && !dir.mkdirs()) return;
+                File file = new File(dir, "chatlingua-invite.png");
+                try (FileOutputStream out = new FileOutputStream(file)) { out.write(Base64.decode(base64Png, Base64.DEFAULT)); }
+                Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".files", file);
+                runOnUiThread(() -> startActivity(Intent.createChooser(
+                    new Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_TEXT, url)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Invite to ChatLingua")));
+            } catch (IOException | IllegalArgumentException ignored) {}
         }
     }
 

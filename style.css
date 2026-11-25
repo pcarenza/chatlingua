@@ -40,6 +40,16 @@ p { color: var(--muted); line-height: 1.5; }
 .stage video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; }
 .placeholder { position: relative; text-align: center; padding: 1.5rem; width: 100%; max-width: 410px; overflow-wrap: anywhere; }
 .placeholder h2 { font-size: clamp(1.28rem, 4vw, 2rem); letter-spacing: -.035em; margin: 1rem 0 .5rem; }
+.invite-qr { margin: .9rem auto 0; width: max-content; max-width: 100%; }
+.invite-qr div { width: 200px; height: 200px; max-width: 100%; background: #fff; border-radius: 8px; overflow: hidden; }
+.invite-qr svg { display: block; width: 100%; height: 100%; }
+.invite-qr figcaption { margin: .4rem 0; font-size: .85rem; opacity: .8; }
+.scan-dialog { width: min(92%, 380px); max-height: 94%; padding: 1rem; color: inherit; background: #182a2c; border: 1px solid #3c5052; border-radius: 14px; text-align: center; }
+.scan-dialog::backdrop { background: rgba(0, 0, 0, .65); }
+.scan-dialog h2 { margin: 0 0 .7rem; font-size: 1.1rem; }
+.stage .scan-dialog video { position: static; width: 100%; height: auto; aspect-ratio: 4/3; max-height: 40dvh; background: #000; border-radius: 10px; }
+.scan-dialog p { margin: .7rem 0; font-size: .9rem; overflow-wrap: anywhere; }
+.scan-actions { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
 .hero-icon { display: grid; place-items: center; width: 64px; height: 64px; margin: auto; border: 1px solid #51756d; border-radius: 21px; background: #304e47; color: var(--accent); }
 .hero-icon svg { width: 30px; height: 30px; }
 .primary { margin-top: 1.3rem; color: #102822; background: var(--accent); border-color: transparent; font-weight: 700; padding: .75rem 1.4rem; }
