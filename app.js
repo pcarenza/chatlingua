@@ -10,11 +10,12 @@ const ui = Object.fromEntries(['invite', 'status', 'remote', 'placeholder', 'sta
   'start', 'self', 'local', 'overlay', 'mic', 'camera', 'speaker', 'captions', 'end', 'spoken', 'source',
   'target', 'caption-status', 'history', 'chat-toggle', 'chat-label', 'chat-panel', 'chat-status',
   'chat-messages', 'mic-device', 'camera-device', 'speaker-device', 'mic-hint', 'speaker-device-label', 'chat-form', 'chat-input', 'chat-send', 'invite-qr', 'invite-qr-code', 'share-qr',
-  'settings', 'fullscreen', 'fullscreen-label', 'chat-badge', 'chat-close', 'chat-previews', 'toast', 'settings-backdrop', 'settings-close', 'sidebar'].map(id => [id, get(id)]));
+  'flip', 'pip-handle', 'settings', 'fullscreen', 'fullscreen-label', 'chat-badge', 'chat-close', 'chat-previews', 'toast', 'settings-backdrop', 'settings-close', 'sidebar'].map(id => [id, get(id)]));
 const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
 const cameraIcon = icon('<rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/>');
 get('camera-icon').innerHTML = cameraIcon;
 ui.camera.querySelector('.icon').innerHTML = cameraIcon;
+ui.flip.querySelector('.icon').innerHTML = icon('<path d="M20 8h-3l-1.5-2h-7L7 8H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2z"/><path d="M15 13.5a3 3 0 0 0-5.2-1.4L9 13m0-3.5V13h3.5M12 15.5a3 3 0 0 0 5.2 1.4L18 16m0 3.5V16h-3.5"/>');
 ui.speaker.querySelector('.icon').innerHTML = icon('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>');
 ui.mic.querySelector('.icon').innerHTML = icon('<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3m-3 0h6"/>');
 ui.captions.querySelector('.icon').innerHTML = icon('<rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9H8a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2m8-6h-2a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2"/>');
@@ -72,6 +73,7 @@ async function refreshDevices() {
     .map(item => ({ id: item.deviceId, name: item.label }));
   fillDevices('audio', pick('audioinput'), 'Microphone {number}');
   fillDevices('video', pick('videoinput'), 'Camera {number}');
+  ui.flip.hidden = deviceSelects.video.options.length < 3;
   if (android?.audioOutputs) {
     let outputs = [];
     try { outputs = JSON.parse(android.audioOutputs()); } catch {}
@@ -143,7 +145,10 @@ async function replaceTrack(session, kind, old, fresh) {
   if (old) session.stream.removeTrack(old);
   session.stream.addTrack(fresh);
   old?.stop();
-  if (kind === 'video') ui.local.srcObject = session.stream;
+  if (kind === 'video') {
+    ui.local.srcObject = session.stream;
+    updateMirror();
+  }
   if (kind === 'audio' && captionSession?.recognition) {
     // Android pipes the call stream through an AudioContext; desktop on-device recognition is started with the track itself.
     captionSession.recognition.useStream?.(session.stream);
@@ -379,7 +384,7 @@ function lobby() {
 }
 
 function activateControls(active) {
-  for (const button of [ui.mic, ui.camera, ui.speaker, ui.captions, ui['chat-toggle'], ui.end]) button.disabled = !active;
+  for (const button of [ui.mic, ui.camera, ui.flip, ui.speaker, ui.captions, ui['chat-toggle'], ui.end]) button.disabled = !active;
   ui.invite.hidden = !active || call?.role !== 'host' || Boolean(call.contact);
   ui.invite.textContent = android ? t('Share invite link') : t('Copy invite link');
   showInviteQr(!ui.invite.hidden && !call.paired);
@@ -413,6 +418,7 @@ function signal(session, type, payload) {
 function showRemote(session) {
   const live = session.peer.connectionState === 'connected';
   ui.placeholder.hidden = live && session.remoteCamera;
+  if (!ui.placeholder.hidden) setSwapped(false);
   if (!live) return;
   ui['stage-title'].textContent = t('Camera is off');
   ui['stage-description'].textContent = t('Your call partner can still talk.');
@@ -490,7 +496,7 @@ function translatePendingChat(session) {
       const translated = await translateText(translator, entry.text);
       if (call !== session || entry.translating !== target || ui.target.value !== target || !translated?.trim()) return;
       entry.body.textContent = translated;
-      if (entry.preview?.isConnected) entry.preview.textContent = translated;
+      if (entry.preview?.isConnected) entry.preview.querySelector('.preview-text').textContent = translated;
       entry.sender.textContent = t('{sender} · {language}', { sender: t('Partner'), language: languages[target] });
       session.pendingChat.delete(message);
     }).catch(() => {
@@ -539,12 +545,21 @@ function openChat(open, focus) {
   } else if (focus) ui['chat-toggle'].focus();
 }
 
+function previewName() {
+  return call?.contact?.label || call?.incoming?.label || t(call?.role === 'host' ? 'Guest' : 'Host');
+}
+
 function showChatPreview(text) {
   const box = ui['chat-previews'];
   const bubble = document.createElement('div');
   bubble.className = 'chat-preview';
   bubble.dir = 'auto';
-  bubble.textContent = text;
+  const name = document.createElement('strong');
+  name.textContent = previewName() + ': ';
+  const body = document.createElement('span');
+  body.className = 'preview-text';
+  body.textContent = text;
+  bubble.append(name, body);
   bubble.addEventListener('click', () => openChat(true));
   box.append(bubble);
   while (box.childElementCount > 3) box.firstElementChild.remove();
@@ -806,9 +821,11 @@ function leave(message, state = 'idle') {
   request('/' + session.id + '/leave', { token: session.token, method: 'POST', keepalive: true }).catch(() => {});
   ui.local.srcObject = ui.remote.srcObject = null;
   ui.remote.muted = false;
+  setSwapped(false);
   android?.callEnded?.();
   ui.speaker.setAttribute('aria-pressed', 'true');
   ui.self.hidden = true;
+  layoutPip();
   ui.history.replaceChildren();
   ui['chat-messages'].replaceChildren();
   ui['chat-input'].value = '';
@@ -867,8 +884,10 @@ async function start({ contact, incoming } = {}) {
       }
     };
     ui.local.srcObject = stream;
+    updateMirror();
     if (deviceSelects.output.value || webSinks) applyOutput(deviceSelects.output.value).catch(() => {});
     ui.self.hidden = false;
+    layoutPip();
     ui.start.hidden = true;
     get('join-link').hidden = true;
     ui.mic.setAttribute('aria-pressed', 'true');
@@ -1107,15 +1126,19 @@ function toast(text) {
   toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1200);
 }
 
+function bigVideo() { return swapped ? ui.local : ui.remote; }
+
 function updateFit() {
-  const { videoWidth: vw, videoHeight: vh } = ui.remote;
-  const box = ui.remote.parentElement.getBoundingClientRect();
+  const big = bigVideo();
+  const { videoWidth: vw, videoHeight: vh } = big;
+  const box = big.parentElement.getBoundingClientRect();
   let fill = fitOverride ? fitOverride === 'fill' : false;
   if (!fitOverride && vw && vh && box.width && box.height) {
     const ratio = (vw / vh) / (box.width / box.height);
     fill = Math.max(ratio, 1 / ratio) < 1.25;
   }
-  ui.remote.classList.toggle('fill', fill);
+  big.classList.toggle('fill', fill);
+  (swapped ? ui.remote : ui.local).classList.remove('fill');
 }
 
 const fullscreenRoot = document.documentElement;
@@ -1140,22 +1163,217 @@ document.addEventListener('keydown', event => {
   if (document.body.classList.contains('settings-open')) openSettings(false, true);
   else if (!ui['chat-panel'].hidden) openChat(false, true);
 });
-for (const type of ['loadedmetadata', 'resize']) ui.remote.addEventListener(type, updateFit);
-ui.remote.addEventListener('dblclick', () => {
-  if (!call) return;
-  fitOverride = ui.remote.classList.contains('fill') ? 'fit' : 'fill';
+for (const video of [ui.remote, ui.local]) {
+  for (const type of ['loadedmetadata', 'resize']) video.addEventListener(type, updateFit);
+  video.addEventListener('dblclick', () => {
+    if (call && video === bigVideo()) toggleFit();
+  });
+}
+function toggleFit() {
+  fitOverride = bigVideo().classList.contains('fill') ? 'fit' : 'fill';
   updateFit();
   toast(t(fitOverride === 'fill' ? 'Fill' : 'Fit'));
-});
+}
 if (globalThis.ResizeObserver) {
   const root = document.documentElement.style;
   new ResizeObserver(() => {
+    layoutPip();
     updateFit();
     root.setProperty('--controls-h', document.querySelector('.controls').offsetHeight + 'px');
   }).observe(ui.remote.parentElement);
-  new ResizeObserver(() => root.setProperty('--controls-h', document.querySelector('.controls').offsetHeight + 'px')).observe(document.querySelector('.controls'));
+  new ResizeObserver(() => {
+    root.setProperty('--controls-h', document.querySelector('.controls').offsetHeight + 'px');
+    layoutPip();
+  }).observe(document.querySelector('.controls'));
   new ResizeObserver(() => root.setProperty('--overlay-h', (ui.overlay.hidden ? 0 : ui.overlay.offsetHeight) + 'px')).observe(ui.overlay);
 }
+// Mirror the self view only for front-facing (or unknown, i.e. webcam) cameras; the outgoing stream is never mirrored.
+const backCamera = /back|rear|environment/i;
+function updateMirror() {
+  const track = call?.stream.getVideoTracks()[0];
+  const facing = track?.getSettings?.().facingMode;
+  ui.local.classList.toggle('mirror', facing ? facing === 'user' : !backCamera.test(track?.label || ''));
+}
+
+let flipping = false;
+async function flipCamera() {
+  const select = deviceSelects.video;
+  const options = [...select.options].filter(option => option.value);
+  if (!call || flipping || options.length < 2) return;
+  flipping = true;
+  ui.flip.disabled = true;
+  try {
+    const track = call.stream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    const side = text => backCamera.test(text) ? 'environment' : /front|user/i.test(text) ? 'user' : '';
+    const currentSide = settings.facingMode || side(track?.label || '');
+    const index = Math.max(0, options.findIndex(option => option.value === settings.deviceId));
+    let next = currentSide ? options.find(option => option.value !== settings.deviceId && side(option.textContent) && side(option.textContent) !== currentSide) : undefined;
+    next ||= options[(index + 1) % options.length];
+    select.value = next.value;
+    await switchInput('video');
+  } finally {
+    flipping = false;
+    ui.flip.disabled = !call;
+  }
+}
+ui.flip.addEventListener('click', flipCamera);
+
+// Small picture-in-picture preview: drag to move (snaps to a corner), corner handle to resize, tap to swap big/small.
+const pipKey = 'chatlingua-pip';
+const pipMargin = 16;
+let swapped = false;
+let pipDragged = false;
+const pip = { corner: 'tr', width: 0 };
+try { Object.assign(pip, JSON.parse(localStorage.getItem(pipKey) || '{}')); } catch {}
+if (!['tl', 'tr', 'bl', 'br'].includes(pip.corner)) pip.corner = 'tr';
+const savePip = () => { try { localStorage.setItem(pipKey, JSON.stringify(pip)); } catch {} };
+const stageBox = () => ui.self.parentElement.getBoundingClientRect();
+const smallVideo = () => swapped ? ui.remote : ui.self;
+
+function pipWidth(box) {
+  const wanted = Number(pip.width) > 0 ? Number(pip.width) : Math.min(180, Math.max(96, box.width * .23));
+  return Math.round(Math.max(80, Math.min(wanted, box.width * .5, box.height * .5 * 4 / 3)));
+}
+
+function pipPosition(corner, width, box) {
+  const height = width * 3 / 4;
+  const controls = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--controls-h')) || 88;
+  const top = corner === 'tl' && !ui.invite.hidden ? 56 : pipMargin;
+  const x = corner[1] === 'l' ? pipMargin : box.width - width - pipMargin;
+  const y = corner[0] === 't' ? top : box.height - controls - height - pipMargin;
+  return { x: Math.max(0, x), y: Math.max(0, y) };
+}
+
+function placePip(x, y, width, corner) {
+  const style = ui.self.parentElement.style;
+  style.setProperty('--pip-w', width + 'px');
+  style.setProperty('--pip-x', x + 'px');
+  style.setProperty('--pip-y', y + 'px');
+  const handle = ui['pip-handle'];
+  const facing = (corner[0] === 't' ? 'b' : 't') + (corner[1] === 'l' ? 'r' : 'l');
+  handle.dataset.corner = facing;
+  handle.style.left = (facing[1] === 'l' ? x : x + width - 30) + 'px';
+  handle.style.top = (facing[0] === 't' ? y : y + width * 3 / 4 - 30) + 'px';
+}
+
+function layoutPip() {
+  if (ui.self.hidden) { ui['pip-handle'].hidden = true; return; }
+  const box = stageBox();
+  if (!box.width) return;
+  const width = pipWidth(box);
+  const { x, y } = pipPosition(pip.corner, width, box);
+  ui['pip-handle'].hidden = false;
+  placePip(x, y, width, pip.corner);
+}
+
+function setSwapped(value) {
+  swapped = value;
+  ui.self.classList.toggle('pip', !swapped);
+  ui.remote.classList.toggle('pip', swapped);
+  for (const element of [ui.self, ui.remote]) {
+    const small = element.classList.contains('pip');
+    element.title = small ? t('Swap videos') : '';
+    if (small) {
+      element.setAttribute('aria-label', t('Swap videos'));
+      element.setAttribute('role', 'button');
+      element.setAttribute('tabindex', '0');
+    } else {
+      element.removeAttribute('aria-label');
+      element.removeAttribute('role');
+      element.removeAttribute('tabindex');
+    }
+  }
+  updateFit();
+  layoutPip();
+}
+setSwapped(false);
+
+function swapVideos() {
+  if (!call || ui.self.hidden) return;
+  if (!swapped && (!ui.placeholder.hidden || !ui.remote.srcObject)) return;
+  setSwapped(!swapped);
+}
+
+function attachPip(element) {
+  let drag;
+  element.addEventListener('pointerdown', event => {
+    if (!element.classList.contains('pip') || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const box = stageBox();
+    const rect = element.getBoundingClientRect();
+    drag = { id: event.pointerId, startX: event.clientX, startY: event.clientY, left: rect.left - box.left, top: rect.top - box.top, width: rect.width, moved: false };
+    element.setPointerCapture(event.pointerId);
+  });
+  element.addEventListener('pointermove', event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    placePip(drag.left + dx, drag.top + dy, drag.width, pip.corner);
+  });
+  const end = event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const { moved } = drag;
+    drag = undefined;
+    if (event.type === 'pointercancel') return layoutPip();
+    if (moved) {
+      const box = stageBox();
+      const rect = element.getBoundingClientRect();
+      const cx = rect.left - box.left + rect.width / 2;
+      const cy = rect.top - box.top + rect.height / 2;
+      pip.corner = (cy < box.height / 2 ? 't' : 'b') + (cx < box.width / 2 ? 'l' : 'r');
+      savePip();
+      layoutPip();
+      pipDragged = true;
+      setTimeout(() => { pipDragged = false; }, 0);
+    } else swapVideos();
+  };
+  element.addEventListener('pointerup', end);
+  element.addEventListener('pointercancel', end);
+  element.addEventListener('keydown', event => {
+    if (element.classList.contains('pip') && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); swapVideos(); }
+  });
+  element.addEventListener('click', event => { if (pipDragged) event.stopImmediatePropagation(); }, true);
+}
+attachPip(ui.self);
+attachPip(ui.remote);
+
+{
+  const handle = ui['pip-handle'];
+  handle.setAttribute('aria-label', t('Resize preview'));
+  let resize;
+  handle.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const box = stageBox();
+    const rect = smallVideo().getBoundingClientRect();
+    const corner = pip.corner;
+    resize = { id: event.pointerId, box, corner, anchorX: corner[1] === 'r' ? rect.right : rect.left, anchorY: corner[0] === 't' ? rect.top : rect.bottom };
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add('active');
+    event.preventDefault();
+  });
+  handle.addEventListener('pointermove', event => {
+    if (!resize || event.pointerId !== resize.id) return;
+    const { box, corner } = resize;
+    const byWidth = Math.abs(event.clientX - resize.anchorX);
+    const byHeight = Math.abs(event.clientY - resize.anchorY) * 4 / 3;
+    const max = Math.min(box.width * .5, box.height * .5 * 4 / 3);
+    pip.width = Math.round(Math.max(80, Math.min(max, Math.max(byWidth, byHeight))));
+    const { x, y } = pipPosition(corner, pip.width, box);
+    placePip(x, y, pip.width, corner);
+  });
+  const finish = event => {
+    if (!resize || event.pointerId !== resize.id) return;
+    resize = undefined;
+    handle.classList.remove('active');
+    savePip();
+    layoutPip();
+  };
+  handle.addEventListener('pointerup', finish);
+  handle.addEventListener('pointercancel', finish);
+}
+
 get('add-call-contact').addEventListener('click', requestCallContact);
 get('accept-contact').addEventListener('click', acceptCallContact);
 get('decline-contact').addEventListener('click', () => {

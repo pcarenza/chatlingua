@@ -80,6 +80,11 @@ Share invite link|Compartir enlace de invitación|Partager le lien d’invitatio
 Copy invite link|Copiar enlace de invitación|Copier le lien d’invitation|Copiar link de convite
 Camera is off|La cámara está apagada|La caméra est désactivée|A câmera está desligada
 Your call partner can still talk.|Tu interlocutor puede seguir hablando.|Votre interlocuteur peut toujours parler.|A outra pessoa ainda pode falar.
+Guest|Invitado|Invité|Convidado
+Host|Anfitrión|Hôte|Anfitrião
+Flip|Girar|Retourner|Girar
+Swap videos|Intercambiar vídeos|Échanger les vidéos|Trocar vídeos
+Resize preview|Cambiar tamaño de la vista previa|Redimensionner l’aperçu|Redimensionar a visualização
 Partner|Interlocutor|Interlocuteur|Outra pessoa
 Original|Original|Texte original|Original
 {sender} · {language}|{sender} · {language}|{sender} · {language}|{sender} · {language}

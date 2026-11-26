@@ -50,7 +50,8 @@
             </form>
             <div class="scan-actions"><button id="scan-paste" type="button">Paste link instead</button><button id="scan-cancel" type="button">Cancel</button></div>
           </dialog>
-          <div id="self" class="self" hidden><video id="local" autoplay playsinline muted></video><span>You</span></div>
+          <div id="self" class="self pip" hidden><video id="local" class="mirror" autoplay playsinline muted></video><span>You</span></div>
+          <div id="pip-handle" class="pip-handle" data-corner="bl" hidden></div>
           <div id="overlay" class="overlay" hidden></div>
           <div id="chat-previews" class="chat-previews" aria-hidden="true"></div>
           <div id="toast" class="toast" role="status"></div>
@@ -58,6 +59,7 @@
         <div class="controls" aria-label="Call controls">
           <button id="mic" disabled aria-pressed="true"><span class="icon"></span><span>Mic</span></button>
           <button id="camera" disabled aria-pressed="true"><span class="icon"></span><span>Camera</span></button>
+          <button id="flip" type="button" disabled hidden><span class="icon"></span><span>Flip</span></button>
           <button id="speaker" disabled aria-pressed="true"><span class="icon"></span><span>Speaker</span></button>
           <button id="captions" disabled aria-pressed="false"><span class="icon"></span><span>Captions</span></button>
           <button id="chat-toggle" disabled aria-expanded="false" aria-controls="chat-panel"><span class="icon"></span><span id="chat-label">Chat</span><span id="chat-badge" class="badge" aria-hidden="true" hidden></span></button>

@@ -62,8 +62,19 @@ p { color: var(--muted); line-height: 1.5; }
 .hero-icon svg { width: 30px; height: 30px; }
 .primary { margin-top: 1.3rem; color: #102822; background: var(--accent); border-color: transparent; font-weight: 700; padding: .75rem 1.4rem; }
 .primary:hover:not(:disabled) { background: #b0f6e1; }
-.self { position: absolute; top: 1rem; right: 1rem; width: clamp(82px, 23%, 180px); aspect-ratio: 4/3; overflow: hidden; background: #162222; border: 1px solid #5e7774; border-radius: 12px; }
-.self video { transform: scaleX(-1); }
+.self { position: absolute; inset: 0; z-index: 0; overflow: hidden; background: #162222; }
+.stage .pip { position: absolute; inset: auto; left: var(--pip-x, 1rem); top: var(--pip-y, 1rem); z-index: 1; width: var(--pip-w, 120px); height: auto; aspect-ratio: 4/3; overflow: hidden; background: #162222; border: 1px solid #5e7774; border-radius: 12px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.stage video.pip { object-fit: cover; }
+.stage .pip video { object-fit: cover; pointer-events: none; }
+.stage video.mirror { transform: scaleX(-1); }
+.pip-handle { position: absolute; z-index: 3; width: 30px; height: 30px; touch-action: none; opacity: 0; transition: opacity .2s; }
+.pip-handle::after { content: ""; position: absolute; width: 14px; height: 14px; border: 0 solid #fffc; filter: drop-shadow(0 0 2px #000a); }
+.pip-handle[data-corner="bl"] { cursor: nesw-resize; } .pip-handle[data-corner="bl"]::after { left: 5px; bottom: 5px; border-width: 0 0 3px 3px; border-bottom-left-radius: 6px; }
+.pip-handle[data-corner="br"] { cursor: nwse-resize; } .pip-handle[data-corner="br"]::after { right: 5px; bottom: 5px; border-width: 0 3px 3px 0; border-bottom-right-radius: 6px; }
+.pip-handle[data-corner="tl"] { cursor: nwse-resize; } .pip-handle[data-corner="tl"]::after { left: 5px; top: 5px; border-width: 3px 0 0 3px; border-top-left-radius: 6px; }
+.pip-handle[data-corner="tr"] { cursor: nesw-resize; } .pip-handle[data-corner="tr"]::after { right: 5px; top: 5px; border-width: 3px 3px 0 0; border-top-right-radius: 6px; }
+@media (hover: hover) { .stage:hover .pip-handle, .pip-handle.active { opacity: .85; } }
+@media (hover: none) { .pip-handle { opacity: .7; } }
 .self span { position: absolute; left: .4rem; bottom: .4rem; padding: .15rem .4rem; background: #102020dd; border-radius: 5px; font-size: .85rem; }
 .overlay { position: absolute; bottom: 1rem; max-width: 90%; max-height: 40%; overflow: auto; padding: .55rem .8rem; text-align: center; background: #0b1415ed; border-radius: 8px; font-size: clamp(1rem, 2.3vw, 1.35rem); overflow-wrap: anywhere; }
 .controls { display: flex; justify-content: center; flex-wrap: wrap; gap: .65rem; padding: 1rem .45rem; }
@@ -138,9 +149,10 @@ select { display: block; width: 100%; margin-top: .35rem; background: #111c1e; c
 .badge { position: absolute; top: -6px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: #e5484d; color: #fff; font-size: .72rem; font-weight: 700; line-height: 19px; text-align: center; }
 #chat-toggle { position: relative; }
 #remote { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-.stage #remote.fill { object-fit: cover; }
+.stage video.fill { object-fit: cover; }
 .chat-previews { position: absolute; left: 1rem; bottom: calc(var(--controls-h, 5.5rem) + var(--overlay-h, 0px) + 1rem); z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; max-width: min(70%, 420px); pointer-events: none; }
 .chat-preview { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; padding: .5rem .8rem; background: #0b1415ed; border-radius: 8px; font-size: clamp(.95rem, 2vw, 1.15rem); overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; pointer-events: auto; transition: opacity .4s; }
+.chat-preview strong { font-weight: 700; color: var(--accent); }
 .chat-preview.fade { opacity: 0; }
 .toast { position: absolute; top: 1rem; left: 50%; z-index: 4; transform: translateX(-50%); padding: .4rem .9rem; background: #0b1415ed; border-radius: 99px; font-size: .95rem; opacity: 0; pointer-events: none; transition: opacity .25s; }
 .toast.show { opacity: 1; }
