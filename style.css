@@ -149,6 +149,8 @@ select { display: block; width: 100%; margin-top: .35rem; background: #111c1e; c
 .badge { position: absolute; top: -6px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: #e5484d; color: #fff; font-size: .72rem; font-weight: 700; line-height: 19px; text-align: center; }
 #chat-toggle { position: relative; }
 #remote { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+/* When swapped into the small window, the remote video must receive touch drags too. */
+.stage #remote.pip { touch-action: none; }
 .stage video.fill { object-fit: cover; }
 .chat-previews { position: absolute; left: 1rem; bottom: calc(var(--controls-h, 5.5rem) + var(--overlay-h, 0px) + 1rem); z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; max-width: min(70%, 420px); pointer-events: none; }
 .chat-preview { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; padding: .5rem .8rem; background: #0b1415ed; border-radius: 8px; font-size: clamp(.95rem, 2vw, 1.15rem); overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; pointer-events: auto; transition: opacity .4s; }
