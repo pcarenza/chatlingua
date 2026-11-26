@@ -54,8 +54,16 @@ let fitOverride, toastTimer;
 const deviceKeys = { audio: 'chatlingua-mic', video: 'chatlingua-camera', output: 'chatlingua-speaker' };
 const deviceSelects = { audio: ui['mic-device'], video: ui['camera-device'], output: ui['speaker-device'] };
 const webSinks = !android && 'setSinkId' in HTMLMediaElement.prototype;
-const savedDevice = kind => { try { return localStorage.getItem(deviceKeys[kind]) || ''; } catch { return ''; } };
-const saveDevice = (kind, id) => { try { localStorage.setItem(deviceKeys[kind], id); } catch {} };
+// Keep choices in memory too: storage can be unavailable (e.g. older Android app builds without DOM storage).
+const chosenDevices = {};
+const savedDevice = kind => {
+  if (kind in chosenDevices) return chosenDevices[kind];
+  try { return localStorage.getItem(deviceKeys[kind]) || ''; } catch { return ''; }
+};
+const saveDevice = (kind, id) => {
+  chosenDevices[kind] = id;
+  try { localStorage.setItem(deviceKeys[kind], id); } catch {}
+};
 ui['speaker-device-label'].hidden = !android?.audioOutputs && !webSinks;
 
 function fillDevices(kind, items, label) {
