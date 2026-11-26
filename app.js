@@ -108,19 +108,33 @@ async function switchInput(kind) {
   if (!session) return;
   const old = session.stream.getTracks().find(item => item.kind === kind);
   const previous = old?.getSettings().deviceId;
-  const open = async () => (await navigator.mediaDevices.getUserMedia(mediaConstraints(kind, true))).getTracks()[0];
+  const busy = error => ['NotReadableError', 'AbortError', 'TrackStartError'].includes(error?.name);
+  const attempt = async constraints => {
+    // A camera that was just released can stay busy for a moment on phones, so retry with a short backoff.
+    for (let tries = 0; ; tries++) {
+      try { return (await navigator.mediaDevices.getUserMedia(constraints)).getTracks()[0]; }
+      catch (error) {
+        if (!busy(error) || tries >= 5) throw error;
+        await new Promise(resolve => setTimeout(resolve, 200 * (tries + 1)));
+      }
+    }
+  };
+  const open = () => attempt(mediaConstraints(kind, true));
+  // Phones generally cannot open two cameras at once, so release the current one first.
+  const releaseFirst = kind === 'video' && (android || navigator.maxTouchPoints > 0);
   let fresh;
   try {
-    try { fresh = await open(); }
-    catch (error) {
-      // Some phones cannot open two cameras or microphones at once; release the old one and retry.
-      if (!old || !['NotReadableError', 'AbortError'].includes(error.name)) throw error;
-      old.stop();
+    try {
+      if (releaseFirst && old) old.stop();
+      fresh = await open();
+    } catch (error) {
+      if (!old || (!releaseFirst && !busy(error))) throw error;
+      if (!releaseFirst) old.stop();
       try { fresh = await open(); }
       catch (retry) {
-        const restore = (await navigator.mediaDevices.getUserMedia(kind === 'audio'
+        const restore = await attempt(kind === 'audio'
           ? { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, deviceId: previous } }
-          : { video: { deviceId: previous } })).getTracks()[0];
+          : { video: { deviceId: previous } });
         await replaceTrack(session, kind, old, restore);
         throw retry;
       }
