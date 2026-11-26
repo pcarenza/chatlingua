@@ -183,6 +183,14 @@ Signal queue full.|La cola de señales está llena.|La file de signaux est plein
 Room is busy. Try again shortly.|La sala está ocupada. Inténtalo de nuevo en un momento.|Le salon est occupé. Réessayez dans un instant.|A sala está ocupada. Tente novamente em instantes.
 Room service unavailable.|Servicio de salas no disponible.|Service de salons indisponible.|Serviço de salas indisponível.
 Could not process this request.|No se pudo procesar esta solicitud.|Impossible de traiter cette demande.|Não foi possível processar esta solicitação.
+Settings|Ajustes|Paramètres|Configurações
+Full screen|Pantalla completa|Plein écran|Tela cheia
+Exit full screen|Salir de pantalla completa|Quitter le plein écran|Sair da tela cheia
+Fill|Llenar|Remplir|Preencher
+Fit|Ajustar|Ajuster|Ajustar
+Close chat|Cerrar chat|Fermer la discussion|Fechar chat
+Close settings|Cerrar ajustes|Fermer les paramètres|Fechar configurações
+Chat, {count} unread|Chat, {count} sin leer|Discussion, {count} non lus|Chat, {count} não lidas
 `.trim().split('\n').map(row => row.split('|'));
 
 const options = { en: 'English', es: 'Español', fr: 'Français', pt: 'Português' };

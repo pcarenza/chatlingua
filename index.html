@@ -52,14 +52,18 @@
           </dialog>
           <div id="self" class="self" hidden><video id="local" autoplay playsinline muted></video><span>You</span></div>
           <div id="overlay" class="overlay" hidden></div>
+          <div id="chat-previews" class="chat-previews" aria-hidden="true"></div>
+          <div id="toast" class="toast" role="status"></div>
         </div>
         <div class="controls" aria-label="Call controls">
           <button id="mic" disabled aria-pressed="true"><span class="icon"></span><span>Mic</span></button>
           <button id="camera" disabled aria-pressed="true"><span class="icon"></span><span>Camera</span></button>
           <button id="speaker" disabled aria-pressed="true"><span class="icon"></span><span>Speaker</span></button>
           <button id="captions" disabled aria-pressed="false"><span class="icon"></span><span>Captions</span></button>
-          <button id="chat-toggle" disabled aria-expanded="false" aria-controls="chat-panel"><span class="icon"></span><span id="chat-label">Chat</span></button>
+          <button id="chat-toggle" disabled aria-expanded="false" aria-controls="chat-panel"><span class="icon"></span><span id="chat-label">Chat</span><span id="chat-badge" class="badge" aria-hidden="true" hidden></span></button>
           <button id="add-call-contact" type="button" hidden disabled><span class="icon"></span><span>Add contact</span></button>
+          <button id="settings" type="button" aria-expanded="false" aria-controls="sidebar"><span class="icon"></span><span>Settings</span></button>
+          <button id="fullscreen" type="button"><span class="icon"></span><span id="fullscreen-label">Full screen</span></button>
           <button id="end" class="end" disabled><span class="icon"></span><span>Leave</span></button>
         </div>
         <div id="contact-exchange" class="contact-exchange" hidden>
@@ -68,7 +72,7 @@
           <button id="decline-contact" type="button" hidden>Decline</button>
         </div>
         <section id="chat-panel" class="chat" aria-labelledby="chat-title" hidden>
-          <h2 id="chat-title">Room chat</h2>
+          <div class="chat-head"><h2 id="chat-title">Room chat</h2><button id="chat-close" class="close" type="button" aria-label="Close chat">×</button></div>
           <p id="chat-status" role="status">Chat opens when your call connects.</p>
           <div id="chat-messages" role="log" aria-label="Chat messages" tabindex="0"></div>
           <form id="chat-form">
@@ -78,7 +82,9 @@
           </form>
         </section>
       </section>
-      <aside class="sidebar" aria-label="Caption settings and history">
+      <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+      <aside id="sidebar" class="sidebar" aria-label="Caption settings and history">
+        <button id="settings-close" class="close" type="button" aria-label="Close settings">×</button>
         <section id="contacts" class="contacts" aria-labelledby="contacts-title" hidden>
           <h2 id="contacts-title">Contacts</h2>
           <button id="setup-contacts" type="button">Get my contact code</button>

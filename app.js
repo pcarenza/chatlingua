@@ -9,7 +9,8 @@ if (android) get('android-download')?.remove();
 const ui = Object.fromEntries(['invite', 'status', 'remote', 'placeholder', 'stage-title', 'stage-description',
   'start', 'self', 'local', 'overlay', 'mic', 'camera', 'speaker', 'captions', 'end', 'spoken', 'source',
   'target', 'caption-status', 'history', 'chat-toggle', 'chat-label', 'chat-panel', 'chat-status',
-  'chat-messages', 'mic-device', 'camera-device', 'speaker-device', 'mic-hint', 'speaker-device-label', 'chat-form', 'chat-input', 'chat-send', 'invite-qr', 'invite-qr-code', 'share-qr'].map(id => [id, get(id)]));
+  'chat-messages', 'mic-device', 'camera-device', 'speaker-device', 'mic-hint', 'speaker-device-label', 'chat-form', 'chat-input', 'chat-send', 'invite-qr', 'invite-qr-code', 'share-qr',
+  'settings', 'fullscreen', 'fullscreen-label', 'chat-badge', 'chat-close', 'chat-previews', 'toast', 'settings-backdrop', 'settings-close', 'sidebar'].map(id => [id, get(id)]));
 const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
 const cameraIcon = icon('<rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/>');
 get('camera-icon').innerHTML = cameraIcon;
@@ -18,6 +19,9 @@ ui.speaker.querySelector('.icon').innerHTML = icon('<path d="M11 5 6 9H2v6h4l5 4
 ui.mic.querySelector('.icon').innerHTML = icon('<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3m-3 0h6"/>');
 ui.captions.querySelector('.icon').innerHTML = icon('<rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9H8a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2m8-6h-2a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2"/>');
 ui['chat-toggle'].querySelector('.icon').innerHTML = icon('<path d="M21 11a8 8 0 0 1-8 8H9l-5 3v-5a8 8 0 0 1-2-6 8 8 0 0 1 8-8h3a8 8 0 0 1 8 8Z"/><path d="M7 9h9m-9 4h6"/>');
+const expandIcon = icon('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>');
+const collapseIcon = icon('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>');
+ui.settings.querySelector('.icon').innerHTML = icon('<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1m0-14.2L17 7M7 17l-2.1 2.1"/>');
 get('add-call-contact').querySelector('.icon').innerHTML = icon('<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-2a4 4 0 0 1 4-4h5a4 4 0 0 1 4 4v2M19 7v8m-4-4h8"/>');
 ui.end.querySelector('.icon').innerHTML = icon('<path d="M3 15v-2a4 4 0 0 1 2-3 15 15 0 0 1 14 0 4 4 0 0 1 2 3v2h-5v-3a11 11 0 0 0-8 0v3z"/>');
 
@@ -43,6 +47,8 @@ let overlayTimer;
 let incomingCall;
 let contactState;
 let refreshingContacts = false;
+const baseTitle = document.title;
+let fitOverride, toastTimer;
 
 const deviceKeys = { audio: 'chatlingua-mic', video: 'chatlingua-camera', output: 'chatlingua-speaker' };
 const deviceSelects = { audio: ui['mic-device'], video: ui['camera-device'], output: ui['speaker-device'] };
@@ -484,6 +490,7 @@ function translatePendingChat(session) {
       const translated = await translateText(translator, entry.text);
       if (call !== session || entry.translating !== target || ui.target.value !== target || !translated?.trim()) return;
       entry.body.textContent = translated;
+      if (entry.preview?.isConnected) entry.preview.textContent = translated;
       entry.sender.textContent = t('{sender} · {language}', { sender: t('Partner'), language: languages[target] });
       session.pendingChat.delete(message);
     }).catch(() => {
@@ -511,15 +518,41 @@ function updateChatAvailability() {
   ui['chat-status'].hidden = Boolean(ready);
 }
 
-function openChat(open) {
+function setUnread(count) {
+  unreadChat = count;
+  ui['chat-badge'].hidden = !count;
+  ui['chat-badge'].textContent = count > 9 ? '9+' : String(count);
+  if (count) ui['chat-toggle'].setAttribute('aria-label', t('Chat, {count} unread', { count }));
+  else ui['chat-toggle'].removeAttribute('aria-label');
+  document.title = count ? '(' + count + ') ' + baseTitle : baseTitle;
+}
+
+function openChat(open, focus) {
   ui['chat-panel'].hidden = !open;
   ui['chat-toggle'].setAttribute('aria-expanded', String(open));
   if (open) {
-    unreadChat = 0;
-    ui['chat-label'].textContent = t('Chat');
+    setUnread(0);
+    ui['chat-previews'].replaceChildren();
     ui['chat-messages'].scrollTop = ui['chat-messages'].scrollHeight;
     prepareChat();
-  }
+    ui['chat-input'].focus();
+  } else if (focus) ui['chat-toggle'].focus();
+}
+
+function showChatPreview(text) {
+  const box = ui['chat-previews'];
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-preview';
+  bubble.dir = 'auto';
+  bubble.textContent = text;
+  bubble.addEventListener('click', () => openChat(true));
+  box.append(bubble);
+  while (box.childElementCount > 3) box.firstElementChild.remove();
+  setTimeout(() => {
+    bubble.classList.add('fade');
+    setTimeout(() => bubble.remove(), 450);
+  }, 5000);
+  return bubble;
 }
 
 function addChatMessage(text, fromSelf, locale) {
@@ -543,9 +576,11 @@ function addChatMessage(text, fromSelf, locale) {
     translatePendingChat(call);
   }
   if (fromSelf || atBottom) log.scrollTop = log.scrollHeight;
+  if (!fromSelf && (ui['chat-panel'].hidden || document.hidden)) setUnread(unreadChat + 1);
   if (!fromSelf && ui['chat-panel'].hidden) {
-    unreadChat++;
-    ui['chat-label'].textContent = t('Chat ({count})', { count: unreadChat });
+    const preview = showChatPreview(body.textContent);
+    const entry = call?.pendingChat.get(message);
+    if (entry) entry.preview = preview;
   }
 }
 
@@ -761,6 +796,7 @@ function leave(message, state = 'idle') {
   const session = call;
   if (!session) return;
   call = undefined;
+  setInCall(false);
   clearTimeout(session.pollTimer);
   closeTranslator(session);
   session.pendingChat.clear();
@@ -776,8 +812,8 @@ function leave(message, state = 'idle') {
   ui.history.replaceChildren();
   ui['chat-messages'].replaceChildren();
   ui['chat-input'].value = '';
-  unreadChat = 0;
-  ui['chat-label'].textContent = t('Chat');
+  setUnread(0);
+  ui['chat-previews'].replaceChildren();
   openChat(false);
   updateChatAvailability();
   inviteId = null;
@@ -812,6 +848,7 @@ async function start({ contact, incoming } = {}) {
     session.incoming = incoming;
     session.checkRingAt = 0;
     call = session;
+    setInCall(true);
     if (contact) await contactsRequest('/ring', { code: contact.code, room: session.id, hostToken: session.token });
     const peer = session.peer = new RTCPeerConnection({ iceServers: info.iceServers });
     for (const track of stream.getTracks()) peer.addTrack(track, stream);
@@ -1043,6 +1080,82 @@ async function toggleCaptions() {
 }
 
 ui['chat-toggle'].addEventListener('click', () => openChat(ui['chat-panel'].hidden));
+ui['chat-close'].addEventListener('click', () => openChat(false, true));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !ui['chat-panel'].hidden) setUnread(0); });
+
+function setInCall(active) {
+  document.body.classList.toggle('in-call', active);
+  fitOverride = undefined;
+  openSettings(false);
+  if (!active && document.fullscreenElement) document.exitFullscreen?.().catch?.(() => {});
+  if (!active && document.webkitFullscreenElement) document.webkitExitFullscreen?.();
+  updateFit();
+}
+
+function openSettings(open, focus) {
+  document.body.classList.toggle('settings-open', open);
+  ui['settings-backdrop'].hidden = !open;
+  ui.settings.setAttribute('aria-expanded', String(open));
+  if (open) ui['settings-close'].focus();
+  else if (focus) ui.settings.focus();
+}
+
+function toast(text) {
+  ui.toast.textContent = text;
+  ui.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1200);
+}
+
+function updateFit() {
+  const { videoWidth: vw, videoHeight: vh } = ui.remote;
+  const box = ui.remote.parentElement.getBoundingClientRect();
+  let fill = fitOverride ? fitOverride === 'fill' : false;
+  if (!fitOverride && vw && vh && box.width && box.height) {
+    const ratio = (vw / vh) / (box.width / box.height);
+    fill = Math.max(ratio, 1 / ratio) < 1.25;
+  }
+  ui.remote.classList.toggle('fill', fill);
+}
+
+const fullscreenRoot = document.documentElement;
+const requestFullscreen = fullscreenRoot.requestFullscreen || fullscreenRoot.webkitRequestFullscreen;
+ui.fullscreen.hidden = !requestFullscreen || Boolean(android);
+ui.fullscreen.querySelector('.icon').innerHTML = expandIcon;
+function updateFullscreen() {
+  const on = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  ui['fullscreen-label'].textContent = t(on ? 'Exit full screen' : 'Full screen');
+  ui.fullscreen.querySelector('.icon').innerHTML = on ? collapseIcon : expandIcon;
+}
+ui.fullscreen.addEventListener('click', () => {
+  if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  else Promise.resolve(requestFullscreen.call(fullscreenRoot)).catch(() => {});
+});
+for (const type of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(type, updateFullscreen);
+ui.settings.addEventListener('click', () => openSettings(!document.body.classList.contains('settings-open')));
+ui['settings-close'].addEventListener('click', () => openSettings(false, true));
+ui['settings-backdrop'].addEventListener('click', () => openSettings(false));
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || event.defaultPrevented || !call) return;
+  if (document.body.classList.contains('settings-open')) openSettings(false, true);
+  else if (!ui['chat-panel'].hidden) openChat(false, true);
+});
+for (const type of ['loadedmetadata', 'resize']) ui.remote.addEventListener(type, updateFit);
+ui.remote.addEventListener('dblclick', () => {
+  if (!call) return;
+  fitOverride = ui.remote.classList.contains('fill') ? 'fit' : 'fill';
+  updateFit();
+  toast(t(fitOverride === 'fill' ? 'Fill' : 'Fit'));
+});
+if (globalThis.ResizeObserver) {
+  const root = document.documentElement.style;
+  new ResizeObserver(() => {
+    updateFit();
+    root.setProperty('--controls-h', document.querySelector('.controls').offsetHeight + 'px');
+  }).observe(ui.remote.parentElement);
+  new ResizeObserver(() => root.setProperty('--controls-h', document.querySelector('.controls').offsetHeight + 'px')).observe(document.querySelector('.controls'));
+  new ResizeObserver(() => root.setProperty('--overlay-h', (ui.overlay.hidden ? 0 : ui.overlay.offsetHeight) + 'px')).observe(ui.overlay);
+}
 get('add-call-contact').addEventListener('click', requestCallContact);
 get('accept-contact').addEventListener('click', acceptCallContact);
 get('decline-contact').addEventListener('click', () => {
