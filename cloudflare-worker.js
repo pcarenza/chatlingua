@@ -50,12 +50,16 @@ export class RoomService extends DurableObject {
           expires, state, id, revision).rowsWritten > 0;
       },
     };
-    this.contacts = new ContactService(sql, this.rooms, request => handleRooms(request, this.env, this.rooms));
+    this.contacts = new ContactService(sql, this.rooms, request => handleRooms(request, this.env, this.rooms),
+      this.env, promise => ctx.waitUntil(promise));
   }
 
   fetch(request) {
     const path = new URL(request.url).pathname;
     if (path === '/api/contacts' || path.startsWith('/api/contacts/')) return this.contacts.fetch(request);
+    const leaving = request.method === 'POST' && /^\/api\/rooms\/([a-f0-9]{36})\/leave$/.exec(path);
+    // The caller hung up: dismiss the ring on the recipient's devices before the room disappears.
+    if (leaving) this.contacts.cancelRing(leaving[1]);
     return handleRooms(request, this.env, this.rooms);
   }
 }

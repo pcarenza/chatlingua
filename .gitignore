@@ -7,3 +7,4 @@ android/local.properties
 outputs/
 .wrangler/
 node_modules/
+android/app/google-services.json

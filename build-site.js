@@ -5,6 +5,8 @@ const files = [
   ['/app.js', 'app.js', 'text/javascript'],
   ['/i18n.js', 'i18n.js', 'text/javascript'],
   ['/android-bridge.js', 'android-bridge.js', 'text/javascript'],
+  ['/ringer.js', 'ringer.js', 'text/javascript'],
+  ['/sw.js', 'sw.js', 'text/javascript'],
   ['/vendor/qrcode.js', 'vendor/qrcode.js', 'text/javascript'],
   ['/vendor/jsQR.js', 'vendor/jsQR.js', 'text/javascript'],
 ];

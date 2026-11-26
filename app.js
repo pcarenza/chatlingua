@@ -1,5 +1,6 @@
 import { androidRecognition, androidTranslator } from './android-bridge.js';
 import { localizeInterface } from './i18n.js';
+import { createRinger } from './ringer.js';
 
 const { locale: interfaceLocale, t } = localizeInterface();
 
@@ -48,6 +49,10 @@ let overlayTimer;
 let incomingCall;
 let contactState;
 let refreshingContacts = false;
+let pendingCallAction;
+let pushSynced = false;
+let askedAndroidNotifications = false;
+const ringer = createRinger({ android, t });
 const baseTitle = document.title;
 let fitOverride, toastTimer;
 
@@ -220,7 +225,69 @@ function contactStatus(message) {
 function showIncoming() {
   incomingCall = !call && !ui.start.disabled ? contactState?.incoming[0] : undefined;
   get('incoming-call').hidden = !incomingCall;
-  if (incomingCall) get('incoming-label').textContent = t('Incoming call from {name}', { name: incomingCall.label });
+  if (incomingCall) {
+    get('incoming-label').textContent = t('Incoming call from {name}', { name: incomingCall.label });
+    ringer.start(incomingCall);
+  } else {
+    ringer.stop();
+  }
+  if (pendingCallAction && incomingCall?.room === pendingCallAction.room) {
+    const { action, room } = pendingCallAction;
+    pendingCallAction = undefined;
+    setTimeout(() => globalThis.chatlinguaCallAction(action, room), 0);
+  }
+}
+
+async function declineIncoming() {
+  if (!incomingCall) return;
+  ringer.stop();
+  try {
+    await contactsRequest('/decline', { room: incomingCall.room });
+    await refreshContacts();
+  } catch (error) {
+    contactStatus(error.message);
+  }
+}
+
+function answerIncoming() {
+  if (!incomingCall) return;
+  ringer.stop();
+  start({ incoming: incomingCall });
+}
+
+// Called by the Android notification actions, the push service worker and ?answer= links.
+globalThis.chatlinguaCallAction = (action, room) => {
+  if (incomingCall?.room === room) {
+    if (action === 'answer') answerIncoming();
+    else if (action === 'decline') declineIncoming();
+  } else if (typeof room === 'string') {
+    // The contact list may not have loaded yet (cold start); apply it once the ring shows up.
+    pendingCallAction = { action, room };
+    setTimeout(() => { if (pendingCallAction?.room === room) pendingCallAction = undefined; }, 15_000);
+  }
+};
+
+const pushSupported = !android && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+function updateNotificationButton() {
+  get('enable-notifications').hidden = android || !globalThis.Notification || !contactState || Notification.permission !== 'default';
+}
+
+async function syncPush() {
+  if (!pushSupported || pushSynced || !contactState || Notification.permission !== 'granted') return;
+  pushSynced = true;
+  try {
+    const { key } = await apiRequest('/api/contacts/push-key');
+    if (!key) return;
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0)),
+    });
+    await contactsRequest('/push-subscribe', subscription.toJSON());
+  } catch {
+    pushSynced = false;
+  }
 }
 
 function renderContacts(state) {
@@ -266,6 +333,12 @@ function renderContacts(state) {
   }
   for (const dial of list.querySelectorAll('button:first-of-type')) dial.disabled = Boolean(call) || ui.start.disabled;
   showIncoming();
+  updateNotificationButton();
+  syncPush();
+  if (android?.requestNotificationPermission && !askedAndroidNotifications) {
+    askedAndroidNotifications = true;
+    android.requestNotificationPermission();
+  }
 }
 
 async function refreshContacts() {
@@ -319,24 +392,37 @@ function setupContacts() {
       contactStatus(error.message);
     }
   });
-  get('accept-call').addEventListener('click', () => {
-    if (incomingCall) start({ incoming: incomingCall });
-  });
-  get('decline-call').addEventListener('click', async () => {
-    if (!incomingCall) return;
+  get('accept-call').addEventListener('click', answerIncoming);
+  get('decline-call').addEventListener('click', declineIncoming);
+  get('enable-notifications').addEventListener('click', async () => {
     try {
-      await contactsRequest('/decline', { room: incomingCall.room });
-      await refreshContacts();
-    } catch (error) {
-      contactStatus(error.message);
-    }
+      const result = await Notification.requestPermission();
+      contactStatus(result === 'granted' ? t('Call notifications enabled.')
+        : result === 'denied' ? t('Notifications are blocked in your browser settings.') : '');
+    } catch {}
+    updateNotificationButton();
+    syncPush();
   });
+  if (pushSupported) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data?.type === 'answer') globalThis.chatlinguaCallAction('answer', event.data.room);
+    });
+  }
+  const answerRoom = new URL(location.href).searchParams.get('answer');
+  if (answerRoom) {
+    history.replaceState(null, '', location.pathname);
+    if (/^[a-f0-9]{36}$/.test(answerRoom)) globalThis.chatlinguaCallAction('answer', answerRoom);
+  }
   refreshContacts();
-  setInterval(() => {
-    if (contactState && !document.hidden && !call) refreshContacts();
-  }, 5000);
+  // Idle polling is how an incoming ring is noticed: ~3 s while visible, a bit slower in a background tab.
+  const idlePoll = () => {
+    if (contactState && !call) refreshContacts();
+    setTimeout(idlePoll, document.hidden ? 15000 : 5000);
+  };
+  setTimeout(idlePoll, 5000);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !call) refreshContacts();
+    if (!call) refreshContacts();
   });
 }
 

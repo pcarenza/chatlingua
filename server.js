@@ -8,6 +8,8 @@ const files = new Map([
   ['/app.js', ['app.js', 'text/javascript']],
   ['/i18n.js', ['i18n.js', 'text/javascript']],
   ['/android-bridge.js', ['android-bridge.js', 'text/javascript']],
+  ['/ringer.js', ['ringer.js', 'text/javascript']],
+  ['/sw.js', ['sw.js', 'text/javascript']],
   ['/vendor/qrcode.js', ['vendor/qrcode.js', 'text/javascript']],
   ['/vendor/jsQR.js', ['vendor/jsQR.js', 'text/javascript']],
 ]);
@@ -59,6 +61,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(200, { 'Content-Type': type + '; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
       return response.end(content);
     }
+    if (request.method === 'GET' && url.pathname === '/api/contacts/push-key') return send(response, 200, { key: null });
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       if (rooms.size >= 500) return send(response, 503, { error: 'All rooms are in use. Try again shortly.' });
       const id = token();

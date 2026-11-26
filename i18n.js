@@ -71,6 +71,9 @@ Rename|Cambiar nombre|Renommer|Renomear
 Rename {name}|Cambiar el nombre de {name}|Renommer {name}|Renomear {name}
 Contact removed.|Contacto eliminado.|Contact supprimé.|Contato removido.
 Could not refresh contacts. Retrying when the app is open.|No se pudieron actualizar los contactos. Volveremos a intentarlo con la app abierta.|Impossible d’actualiser les contacts. Nouvel essai quand l’application sera ouverte.|Não foi possível atualizar os contatos. Vamos tentar novamente quando o app estiver aberto.
+Enable call notifications|Activar notificaciones de llamadas|Activer les notifications d’appel|Ativar notificações de chamadas
+Call notifications enabled.|Notificaciones de llamadas activadas.|Notifications d’appel activées.|Notificações de chamadas ativadas.
+Notifications are blocked in your browser settings.|Las notificaciones están bloqueadas en los ajustes del navegador.|Les notifications sont bloquées dans les paramètres du navigateur.|As notificações estão bloqueadas nas configurações do navegador.
 Contact code copied.|Código de contacto copiado.|Code de contact copié.|Código de contato copiado.
 Contact saved.|Contacto guardado.|Contact enregistré.|Contato salvo.
 You’re invited|Te han invitado|Vous êtes invité|Você recebeu um convite
