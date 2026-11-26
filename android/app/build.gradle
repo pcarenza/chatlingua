@@ -1,8 +1,14 @@
-plugins { id 'com.android.application' version '8.5.2' }
+plugins {
+    id 'com.android.application' version '8.5.2'
+    id 'com.google.gms.google-services' version '4.4.2' apply false
+}
 def cloudflareBuild = providers.gradleProperty('chatlinguaCloudflare').orElse('true').get().toBoolean()
 def chatlinguaHost = cloudflareBuild
     ? 'chatlingua.pcarenza.workers.dev'
     : 'chatlingua-video-calls.goldencurl1.chatgpt.site'
+
+// Firebase is only configured for the Cloudflare package, and only when google-services.json is present.
+if (cloudflareBuild && file('google-services.json').exists()) apply plugin: 'com.google.gms.google-services'
 
 android {
     buildFeatures { buildConfig true }
@@ -32,4 +38,6 @@ android {
 dependencies {
     implementation 'com.google.mlkit:translate:17.0.3'
     implementation 'androidx.core:core:1.9.0'
+    implementation platform('com.google.firebase:firebase-bom:33.5.1')
+    implementation 'com.google.firebase:firebase-messaging'
 }

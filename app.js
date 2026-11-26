@@ -290,6 +290,31 @@ async function syncPush() {
   }
 }
 
+// Hands the Android Firebase token to the server so rings can wake the app when it is closed.
+let fcmBusyUntil = 0;
+let lastFcmToken;
+async function syncFcm(token) {
+  if (!android || !contactState || Date.now() < fcmBusyUntil) return;
+  try {
+    token ??= android.fcmToken?.();
+    if (typeof token !== 'string' || !token) return;
+    let last = lastFcmToken;
+    try { last ??= localStorage.getItem('fcmToken'); } catch {}
+    if (last === token) return;
+    fcmBusyUntil = Date.now() + 60_000;
+    await contactsRequest('/fcm-register', { token });
+    fcmBusyUntil = 0;
+    lastFcmToken = token;
+    try { localStorage.setItem('fcmToken', token); } catch {}
+  } catch {}
+}
+let pendingFcmToken;
+globalThis.chatlinguaFcmToken = token => {
+  if (typeof token !== 'string' || !token) return;
+  if (contactState) syncFcm(token);
+  else pendingFcmToken = token;
+};
+
 function renderContacts(state) {
   const list = get('contact-list');
   const unchanged = contactState && JSON.stringify(contactState.contacts) === JSON.stringify(state.contacts);
@@ -335,6 +360,8 @@ function renderContacts(state) {
   showIncoming();
   updateNotificationButton();
   syncPush();
+  syncFcm(pendingFcmToken);
+  pendingFcmToken = undefined;
   if (android?.requestNotificationPermission && !askedAndroidNotifications) {
     askedAndroidNotifications = true;
     android.requestNotificationPermission();

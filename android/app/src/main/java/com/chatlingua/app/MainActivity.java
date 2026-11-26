@@ -2,14 +2,7 @@ package com.chatlingua.app;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.SharedPreferences;
-import android.graphics.drawable.Icon;
-import android.media.AudioAttributes;
-import android.media.RingtoneManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioDeviceCallback;
@@ -64,8 +57,7 @@ public final class MainActivity extends Activity {
     private AudioManager audioManager;
     private boolean changedAudioMode;
     private boolean routedAudio;
-    private static final String CALL_CHANNEL = "incoming_calls";
-    private static final int CALL_NOTIFICATION = 4101;
+    private static volatile MainActivity live;
     private static final int NOTIFICATION_PERMISSION = 2;
     private String[] pendingCall;
     private boolean pageLoaded;
@@ -156,6 +148,8 @@ public final class MainActivity extends Activity {
         audioManager = getSystemService(AudioManager.class);
         audioManager.registerAudioDeviceCallback(deviceCallback, null);
         setContentView(web);
+        live = this;
+        FcmToken.fetch(this, token -> runOnUiThread(() -> sendToken(token)));
         Uri link = getIntent().getData();
         handleCallIntent(getIntent());
         web.loadUrl(trusted(link) ? link.toString() : ORIGIN + "/");
@@ -168,8 +162,15 @@ public final class MainActivity extends Activity {
         dispatchCall();
     }
 
-    private NotificationManager notifications() {
-        return getSystemService(NotificationManager.class);
+    // Called from the messaging service when Firebase rotates the token.
+    static void tokenChanged(String token) {
+        MainActivity activity = live;
+        if (activity != null) activity.runOnUiThread(() -> activity.sendToken(token));
+    }
+
+    private void sendToken(String token) {
+        if (isDestroyed() || !pageLoaded) return;
+        web.evaluateJavascript("window.chatlinguaFcmToken?.(" + JSONObject.quote(token) + ")", null);
     }
 
     // Reads the Answer/Decline/full-screen extras set by the incoming-call notification.
@@ -179,7 +180,7 @@ public final class MainActivity extends Activity {
         if (action == null || room == null) return;
         intent.removeExtra("action");
         intent.removeExtra("room");
-        notifications().cancel(CALL_NOTIFICATION);
+        CallNotifications.cancel(this);
         // Full-screen launches from the lock screen should be visible without unlocking first.
         setShowWhenLocked(true);
         setTurnScreenOn(true);
@@ -191,48 +192,6 @@ public final class MainActivity extends Activity {
         String[] call = pendingCall;
         pendingCall = null;
         web.evaluateJavascript("window.chatlinguaCallAction?.(" + JSONObject.quote(call[0]) + "," + JSONObject.quote(call[1]) + ")", null);
-    }
-
-    private PendingIntent callIntent(String action, String room, int code) {
-        Intent intent = new Intent(this, MainActivity.class)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra("action", action).putExtra("room", room);
-        return PendingIntent.getActivity(this, code, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
-
-    // Returns true when the notification channel will play the ringtone itself.
-    private boolean ring(String name, String room) {
-        NotificationManager manager = notifications();
-        if (!manager.areNotificationsEnabled()) return false;
-        NotificationChannel channel = manager.getNotificationChannel(CALL_CHANNEL);
-        if (channel == null) {
-            channel = new NotificationChannel(CALL_CHANNEL, "Incoming calls", NotificationManager.IMPORTANCE_HIGH);
-            channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-            channel.enableVibration(true);
-            channel.setVibrationPattern(new long[] { 0, 600, 400, 600, 400, 600 });
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            manager.createNotificationChannel(channel);
-        }
-        if (channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
-        Notification notification = new Notification.Builder(this, CALL_CHANNEL)
-            .setSmallIcon(android.R.drawable.sym_call_incoming)
-            .setContentTitle("Incoming call from " + name)
-            .setContentText("ChatLingua video call")
-            .setCategory(Notification.CATEGORY_CALL)
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .setTimeoutAfter(46_000)
-            .setContentIntent(callIntent("show", room, 10))
-            .setFullScreenIntent(callIntent("show", room, 11), true)
-            .addAction(new Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.sym_action_call),
-                "Answer", callIntent("answer", room, 12)).build())
-            .addAction(new Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
-                "Decline", callIntent("decline", room, 13)).build())
-            .build();
-        notification.flags |= Notification.FLAG_INSISTENT;
-        manager.notify(CALL_NOTIFICATION, notification);
-        return channel.getImportance() >= NotificationManager.IMPORTANCE_DEFAULT && channel.getSound() != null;
     }
 
     @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
@@ -422,10 +381,13 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public boolean ringIncoming(String name, String room) {
             if (name == null || room == null || room.length() > 64) return false;
             String label = name.length() > 60 ? name.substring(0, 60) : name;
-            try { return ring(label, room); } catch (RuntimeException e) { return false; }
+            try { return CallNotifications.ring(MainActivity.this, label, room, 46_000); } catch (RuntimeException e) { return false; }
         }
         @JavascriptInterface public void stopRinging() {
-            notifications().cancel(CALL_NOTIFICATION);
+            CallNotifications.cancel(MainActivity.this);
+        }
+        @JavascriptInterface public String fcmToken() {
+            return FcmToken.cached(MainActivity.this);
         }
         @JavascriptInterface public void requestNotificationPermission() {
             runOnUiThread(() -> {
@@ -472,7 +434,8 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        notifications().cancel(CALL_NOTIFICATION);
+        if (live == this) live = null;
+        CallNotifications.cancel(this);
         speechId = 0;
         stopSpeech();
         audioManager.unregisterAudioDeviceCallback(deviceCallback);

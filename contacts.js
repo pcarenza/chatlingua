@@ -1,4 +1,5 @@
 import { pushConfig, sendPush } from './webpush.js';
+import { fcmConfig, sendFcm } from './fcm.js';
 
 const randomHex = bytes => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
@@ -7,6 +8,8 @@ const cookieName = '__Host-chatlingua';
 const codePattern = /^[a-f0-9]{12}$/;
 const ringLifetime = 45_000;
 const maxSubscriptions = 5;
+const maxFcmTokens = 5;
+const fcmTokenPattern = /^[A-Za-z0-9_:-]{100,300}$/;
 const pushHosts = ['googleapis.com', 'mozilla.com', 'windows.com', 'apple.com'];
 const validPushEndpoint = value => {
   try {
@@ -30,6 +33,8 @@ export class ContactService {
     sql.exec('CREATE INDEX IF NOT EXISTS rings_expires ON rings(expires)');
     sql.exec('CREATE TABLE IF NOT EXISTS push_subscriptions (owner TEXT NOT NULL, endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created INTEGER NOT NULL)');
     sql.exec('CREATE INDEX IF NOT EXISTS push_subscriptions_owner ON push_subscriptions(owner, created)');
+    sql.exec('CREATE TABLE IF NOT EXISTS fcm_tokens (owner TEXT NOT NULL, token TEXT PRIMARY KEY, created INTEGER NOT NULL)');
+    sql.exec('CREATE INDEX IF NOT EXISTS fcm_tokens_owner ON fcm_tokens(owner, created)');
   }
 
   first(query, ...bindings) {
@@ -38,6 +43,7 @@ export class ContactService {
 
   // Best-effort Web Push to every device of a profile; dead subscriptions are removed.
   push(owner, message, options) {
+    this.pushFcm(owner, message);
     const config = pushConfig(this.env);
     if (!config) return;
     const subscriptions = this.sql.exec('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE owner = ?', owner).toArray();
@@ -45,6 +51,17 @@ export class ContactService {
     this.waitUntil(Promise.all(subscriptions.map(async subscription => {
       const status = await sendPush(subscription, message, config, options);
       if (status === 404 || status === 410) this.sql.exec('DELETE FROM push_subscriptions WHERE endpoint = ?', subscription.endpoint);
+    })));
+  }
+
+  // Best-effort FCM data message to every Android device of a profile; dead tokens are removed.
+  pushFcm(owner, message) {
+    const config = fcmConfig(this.env);
+    if (!config) return;
+    const tokens = this.sql.exec('SELECT token FROM fcm_tokens WHERE owner = ?', owner).toArray();
+    if (!tokens.length) return;
+    this.waitUntil(Promise.all(tokens.map(async ({ token }) => {
+      if (await sendFcm(token, message, config) === 'gone') this.sql.exec('DELETE FROM fcm_tokens WHERE token = ?', token);
     })));
   }
 
@@ -140,6 +157,19 @@ export class ContactService {
         owner, endpoint, keys.p256dh, keys.auth, now);
       this.sql.exec(`DELETE FROM push_subscriptions WHERE owner = ? AND endpoint NOT IN
         (SELECT endpoint FROM push_subscriptions WHERE owner = ? ORDER BY created DESC, rowid DESC LIMIT ?)`, owner, owner, maxSubscriptions);
+      return json({}, 201);
+    }
+
+    if (path === '/fcm-register' || path === '/fcm-unregister') {
+      const fcmToken = input?.token;
+      if (typeof fcmToken !== 'string' || !fcmTokenPattern.test(fcmToken)) return error('Invalid device token.', 400);
+      if (path === '/fcm-unregister') {
+        this.sql.exec('DELETE FROM fcm_tokens WHERE owner = ? AND token = ?', owner, fcmToken);
+        return json({});
+      }
+      this.sql.exec('INSERT OR REPLACE INTO fcm_tokens (owner, token, created) VALUES (?, ?, ?)', owner, fcmToken, now);
+      this.sql.exec(`DELETE FROM fcm_tokens WHERE owner = ? AND token NOT IN
+        (SELECT token FROM fcm_tokens WHERE owner = ? ORDER BY created DESC, rowid DESC LIMIT ?)`, owner, owner, maxFcmTokens);
       return json({}, 201);
     }
 
