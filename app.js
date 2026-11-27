@@ -757,7 +757,10 @@ function sendCaption(session, message) {
   if (session.channel?.readyState === 'open') session.channel.send(JSON.stringify(message));
 }
 
+let contactExchangeTimer;
 function contactExchangeStatus(message, offer = false) {
+  clearTimeout(contactExchangeTimer);
+  if (message && !offer) contactExchangeTimer = setTimeout(() => contactExchangeStatus(''), 5000);
   get('contact-exchange').hidden = !message;
   get('contact-exchange-status').textContent = message;
   get('accept-contact').hidden = !offer;
