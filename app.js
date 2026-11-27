@@ -775,7 +775,34 @@ function contactExchangeStatus(message, offer = false) {
 
 async function saveCallContact(code) {
   await contactsRequest('/save', { code, label: t('Call partner · {code}', { code: code.slice(-4) }), keepLabel: true });
+  if (call) call.partnerCode = code;
+  await saveContactLanguages(code).catch(() => {});
   await refreshContacts();
+}
+
+const callContactCode = () => call?.contact?.code || call?.incoming?.code || call?.partnerCode;
+function currentLanguages() {
+  return { spoken: ui.spoken.value, source: ui.source.value, target: ui.target.value };
+}
+function saveContactLanguages(code) {
+  const languages = currentLanguages();
+  const saved = contactState?.contacts.find(contact => contact.code === code);
+  if (saved) saved.languages = languages;
+  return contactsRequest('/languages', { code, ...languages });
+}
+let languageSaveTimer;
+function rememberContactLanguages() {
+  const code = callContactCode();
+  if (!code) return;
+  clearTimeout(languageSaveTimer);
+  languageSaveTimer = setTimeout(() => saveContactLanguages(code).catch(() => {}), 1000);
+}
+function applyContactLanguages(code) {
+  const languages = contactState?.contacts.find(contact => contact.code === code)?.languages;
+  if (!languages) return;
+  for (const key of ['spoken', 'source', 'target']) {
+    if (Object.hasOwn(languages, key) && [...ui[key].options].some(option => option.value === languages[key])) ui[key].value = languages[key];
+  }
 }
 
 async function requestCallContact() {
@@ -878,7 +905,10 @@ function connectChannel(session, channel) {
       if (!message || !Object.hasOwn(languages, message.locale)) return;
       if (message.type === 'language') {
         session.remoteLocale = message.locale;
-        if (!captionSession) ui.source.value = message.locale;
+        if (!captionSession && ui.source.value !== message.locale) {
+          ui.source.value = message.locale;
+          rememberContactLanguages();
+        }
       }
       if (message.type === 'caption' && typeof message.text === 'string') showCaption(message);
     } catch {
@@ -1007,6 +1037,7 @@ async function start({ contact, incoming } = {}) {
     const session = { ...info, stream, candidates: [], cursor: 0, outbound: Promise.resolve(), pendingChat: new Map(), remoteCamera: true };
     session.contact = contact;
     session.incoming = incoming;
+    applyContactLanguages(contact?.code || incoming?.code);
     session.checkRingAt = 0;
     call = session;
     setInCall(true);
@@ -1532,6 +1563,7 @@ for (const select of [ui.source, ui.target]) {
     if (!ui['chat-panel'].hidden) prepareChat();
   });
 }
+for (const select of [ui.spoken, ui.source, ui.target]) select.addEventListener('change', rememberContactLanguages);
 ui['chat-form'].addEventListener('submit', handleChatSubmit);
 ui.start.addEventListener('click', () => start());
 ui.end.addEventListener('click', () => leave(t('You left the call')));

@@ -31,6 +31,9 @@ export class ContactService {
     if (!sql.exec('PRAGMA table_info(contacts)').toArray().some(column => column.name === 'added')) {
       sql.exec('ALTER TABLE contacts ADD COLUMN added INTEGER');
     }
+    if (!sql.exec('PRAGMA table_info(contacts)').toArray().some(column => column.name === 'languages')) {
+      sql.exec('ALTER TABLE contacts ADD COLUMN languages TEXT');
+    }
     sql.exec('CREATE TABLE IF NOT EXISTS rings (room TEXT PRIMARY KEY, caller TEXT NOT NULL, recipient TEXT NOT NULL, expires INTEGER NOT NULL, declined INTEGER NOT NULL DEFAULT 0)');
     sql.exec('CREATE INDEX IF NOT EXISTS rings_recipient ON rings(recipient, expires)');
     sql.exec('CREATE INDEX IF NOT EXISTS rings_expires ON rings(expires)');
@@ -91,7 +94,8 @@ export class ContactService {
     const owner = profile.code;
     const now = Date.now();
     if (path === '' && request.method === 'GET') {
-      const contacts = this.sql.exec('SELECT code, label, added FROM contacts WHERE owner = ? ORDER BY label COLLATE NOCASE', owner).toArray();
+      const contacts = this.sql.exec('SELECT code, label, added, languages FROM contacts WHERE owner = ? ORDER BY label COLLATE NOCASE', owner).toArray()
+        .map(({ languages, ...contact }) => ({ ...contact, languages: languages ? JSON.parse(languages) : null }));
       const incoming = this.sql.exec(`
         SELECT rings.room, rings.expires, rings.caller AS code, COALESCE(contacts.label, rings.caller) AS label
         FROM rings LEFT JOIN contacts ON contacts.owner = ? AND contacts.code = rings.caller
@@ -124,6 +128,13 @@ export class ContactService {
       return error('Invalid contact request.', 400);
     }
 
+    if (path === '/languages' && request.method === 'POST') {
+      const code = typeof input?.code === 'string' ? input.code : '';
+      const locale = value => typeof value === 'string' && /^[a-z]{2}-[A-Z]{2}$/.test(value);
+      if (!/^[a-f0-9]{12}$/.test(code) || !['spoken', 'source', 'target'].every(key => locale(input[key]))) return error('Could not process this request.', 400);
+      this.sql.exec('UPDATE contacts SET languages = ? WHERE owner = ? AND code = ?', JSON.stringify({ spoken: input.spoken, source: input.source, target: input.target }), owner, code);
+      return json({});
+    }
     if (path === '/save' || path === '/remove') {
       const code = input?.code;
       if (typeof code !== 'string' || !codePattern.test(code) || code === owner) return error('Enter your contact’s code.', 400);
