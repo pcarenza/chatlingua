@@ -28,6 +28,9 @@ export class ContactService {
     this.joinRoom = joinRoom;
     sql.exec('CREATE TABLE IF NOT EXISTS profiles (code TEXT PRIMARY KEY, token TEXT UNIQUE NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS contacts (owner TEXT NOT NULL, code TEXT NOT NULL, label TEXT NOT NULL, PRIMARY KEY (owner, code))');
+    if (!sql.exec('PRAGMA table_info(contacts)').toArray().some(column => column.name === 'added')) {
+      sql.exec('ALTER TABLE contacts ADD COLUMN added INTEGER');
+    }
     sql.exec('CREATE TABLE IF NOT EXISTS rings (room TEXT PRIMARY KEY, caller TEXT NOT NULL, recipient TEXT NOT NULL, expires INTEGER NOT NULL, declined INTEGER NOT NULL DEFAULT 0)');
     sql.exec('CREATE INDEX IF NOT EXISTS rings_recipient ON rings(recipient, expires)');
     sql.exec('CREATE INDEX IF NOT EXISTS rings_expires ON rings(expires)');
@@ -88,7 +91,7 @@ export class ContactService {
     const owner = profile.code;
     const now = Date.now();
     if (path === '' && request.method === 'GET') {
-      const contacts = this.sql.exec('SELECT code, label FROM contacts WHERE owner = ? ORDER BY label COLLATE NOCASE', owner).toArray();
+      const contacts = this.sql.exec('SELECT code, label, added FROM contacts WHERE owner = ? ORDER BY label COLLATE NOCASE', owner).toArray();
       const incoming = this.sql.exec(`
         SELECT rings.room, rings.expires, rings.caller AS code, COALESCE(contacts.label, rings.caller) AS label
         FROM rings LEFT JOIN contacts ON contacts.owner = ? AND contacts.code = rings.caller
@@ -135,9 +138,9 @@ export class ContactService {
           return error('Your contact list is full.', 409);
         }
         if (input.keepLabel === true) {
-          this.sql.exec('INSERT INTO contacts VALUES (?, ?, ?) ON CONFLICT(owner, code) DO NOTHING', owner, code, label);
+          this.sql.exec('INSERT INTO contacts (owner, code, label, added) VALUES (?, ?, ?, ?) ON CONFLICT(owner, code) DO NOTHING', owner, code, label, Date.now());
         } else {
-          this.sql.exec('INSERT INTO contacts VALUES (?, ?, ?) ON CONFLICT(owner, code) DO UPDATE SET label = excluded.label', owner, code, label);
+          this.sql.exec('INSERT INTO contacts (owner, code, label, added) VALUES (?, ?, ?, ?) ON CONFLICT(owner, code) DO UPDATE SET label = excluded.label', owner, code, label, Date.now());
         }
       }
       return json({});

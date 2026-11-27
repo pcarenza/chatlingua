@@ -75,6 +75,7 @@ Enable call notifications|Activar notificaciones de llamadas|Activer les notific
 Call notifications enabled.|Notificaciones de llamadas activadas.|Notifications d’appel activées.|Notificações de chamadas ativadas.
 Notifications are blocked in your browser settings.|Las notificaciones están bloqueadas en los ajustes del navegador.|Les notifications sont bloquées dans les paramètres du navigateur.|As notificações estão bloqueadas nas configurações do navegador.
 Contact code copied.|Código de contacto copiado.|Code de contact copié.|Código de contato copiado.
+Added {date}|Añadido el {date}|Ajouté le {date}|Adicionado em {date}
 Contact saved.|Contacto guardado.|Contact enregistré.|Contato salvo.
 You’re invited|Te han invitado|Vous êtes invité|Você recebeu um convite
 Allow camera and microphone access to join the call.|Permite el acceso a la cámara y al micrófono para unirte.|Autorisez l’accès à la caméra et au micro pour rejoindre l’appel.|Permita o acesso à câmera e ao microfone para entrar na chamada.

@@ -328,6 +328,12 @@ function renderContacts(state) {
       const item = document.createElement('li');
       const name = document.createElement('span');
       name.textContent = contact.label;
+      if (contact.added) {
+        const added = document.createElement('small');
+        added.className = 'contact-added';
+        added.textContent = t('Added {date}', { date: new Date(contact.added).toLocaleDateString(interfaceLocale, { dateStyle: 'medium' }) });
+        name.append(added);
+      }
       const dial = document.createElement('button');
       dial.textContent = t('Call');
       dial.setAttribute('aria-label', t('Call {name}', { name: contact.label }));
